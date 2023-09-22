@@ -1,6 +1,6 @@
 # PatchCore with Explainability
 This is an unofficial implementation of the paper [Towards Total Recall in Industrial Anomaly Detection](https://arxiv.org/pdf/2106.08265.pdf).
-<img src="https://github.com/any-tech/PatchCore-ex/assets/9916906/aeb30f91-1a42-4075-8055-e7982ad63c99" width=400 link="hoge.com">
+<img src="https://github.com/any-tech/PatchCore-ex/total_recall.jpg" width=400 link="hoge.com">
 
 We ...
 
