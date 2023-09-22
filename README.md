@@ -144,3 +144,120 @@ GPU : NVIDIA A100 SXM4
 <br/>
 
 ### ROC Curve 
+
+- (percentage_coreset = 0.01) & (k = 1)
+![roc](./assets/roc-curve_p0010_k01.png)
+
+<br/>
+
+- (percentage_coreset = 0.01) & (k = 5)
+![roc](./assets/roc-curve_p0010_k05.png)
+
+<br/>
+
+- (percentage_coreset = 0.1) & (k = 1)
+![roc](./assets/roc-curve_p0100_k01.png)
+
+<br/>
+
+- (percentage_coreset = 0.1) & (k = 5)
+![roc](./assets/roc-curve_p0100_k05.png)
+
+<br/>
+
+### Prediction Distribution : (percentage_coreset = 0.01) & (k = 5)
+
+- bottle
+![bottle](./assets/pred-dist_p0100_k05_bottle.png)
+
+- cable
+![cable](./assets/pred-dist_p0100_k05_cable.png)
+
+- capsule
+![capsule](./assets/pred-dist_p0100_k05_capsule.png)
+
+- carpet
+![carpet](./assets/pred-dist_p0100_k05_carpet.png)
+
+- grid
+![grid](./assets/pred-dist_p0100_k05_grid.png)
+
+- hazelnut
+![hazelnut](./assets/pred-dist_p0100_k05_hazelnut.png)
+
+- leather
+![leather](./assets/pred-dist_p0100_k05_leather.png)
+
+- metal_nut
+![metal_nut](./assets/pred-dist_p0100_k05_metal_nut.png)
+
+- pill
+![pill](./assets/pred-dist_p0100_k05_pill.png)
+
+- screw
+![screw](./assets/pred-dist_p0100_k05_screw.png)
+
+- tile
+![tile](./assets/pred-dist_p0100_k05_tile.png)
+
+- toothbrush
+![toothbrush](./assets/pred-dist_p0100_k05_toothbrush.png)
+
+- transistor
+![transistor](./assets/pred-dist_p0100_k05_transistor.png)
+
+- wood
+![wood](./assets/pred-dist_p0100_k05_wood.png)
+
+- zipper
+![zipper](./assets/pred-dist_p0100_k05_zipper.png)
+
+<br/>
+
+### Localization : (percentage_coreset = 0.01) & (k = 5)
+
+- bottle (test case : broken_large)
+![bottle](./assets/localization_p0100_k05_bottle_broken_large_000_s067.png)
+
+- cable (test case : bent_wire)
+![cable](./assets/localization_p0100_k05_cable_bent_wire_000_s075.png)
+
+- capsule (test case : crack)
+![capsule](./assets/localization_p0100_k05_capsule_crack_000_s022.png)
+
+- carpet (test case : color)
+![carpet](./assets/localization_p0100_k05_carpet_color_000_s070.png)
+
+- grid (test case : bent)
+![grid](./assets/localization_p0100_k05_grid_bent_000_s052.png)
+
+- hazelnut (test case : crack)
+![hazelnut](./assets/localization_p0100_k05_hazelnut_crack_000_s048.png)
+
+- leather (test case : color)
+![leather](./assets/localization_p0100_k05_leather_color_000_s058.png)
+
+- metal_nut (test case : bent)
+![metal_nut](./assets/localization_p0100_k05_metal_nut_bent_000_s083.png)
+
+- pill (test case : color)
+![pill](./assets/localization_p0100_k05_pill_color_000_s038.png)
+
+- screw (test case : manipulated_front)
+![screw](./assets/localization_p0100_k05_screw_manipulated_front_000_s049.png)
+
+- tile (test case : crack)
+![tile](./assets/localization_p0100_k05_tile_crack_000_s061.png)
+
+- toothbrush (test case : defective)
+![toothbrush](./assets/localization_p0100_k05_toothbrush_defective_000_s080.png)
+
+- transistor (test case : bent_lead)
+![transistor](./assets/localization_p0100_k05_transistor_bent_lead_000_s045.png)
+
+- wood (test case : color)
+![wood](./assets/localization_p0100_k05_wood_color_000_s065.png)
+
+- zipper (test case : broken_teeth)
+![zipper](./assets/localization_p0100_k05_zipper_broken_teeth_000_s030.png)
+
