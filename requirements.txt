@@ -1,0 +1,10 @@
+faiss-gpu
+matplotlib
+numpy
+opencv-python
+scikit-learn
+scipy
+torch
+torchinfo
+torchvision
+tqdm
