@@ -121,22 +121,22 @@ $\%$
 
 | | Paper<br/>\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
 | - | - | - | - | - |
-| bottle | - | 6.6 | 7.2 | 16.4 |
-| cable | - | 13.2 | 13.2 | 30.1 |
-| capsule | - | 11.6 | 11.9 | 25.3 |
-| carpet | - | 12.0 | 11.6 | 26.2 |
-| grid | - | 7.4 | 7.5 | 17.7 |
-| hazelnut | - | 12.4 | 12.3 | 26.4 |
-| leather | - | 10.9 | 10.8 | 26.8 |
-| metal_nut | - | 8.3 | 8.6 | 23.1 |
-| pill | - | 13.2 | 12.7 | 34.1 |
-| screw | - | 11.7 | 11.7 | 28.4 |
-| tile | - | 10.3 | 9.9 | 22.2 |
-| toothbrush | - | 3.7 | 3.6 | 7.9 |
-| transistor | - | 9.6 | 9.7 | 17.7 |
-| wood | - | 9.9 | 9.4 | 17.8 |
-| zipper | - | 11.4 | 11.4 | 26.6 |
-| Average | - | 10.1 | 10.1 | 23.1 |
+| bottle | - | xxx | xxx | xxx |
+| cable | - | xxx | xxx | xxx |
+| capsule | - | xxx | xxx | xxx |
+| carpet | - | xxx | xxx | xxx |
+| grid | - | xxx | xxx | xxx |
+| hazelnut | - | xxx | xxx | xxx |
+| leather | - | xxx | xxx | xxx |
+| metal_nut | - | xxx | xxx | xxx |
+| pill | - | xxx | xxx | xxx |
+| screw | - | xxx | xxx | xxx |
+| tile | - | xxx | xxx | xxx |
+| toothbrush | - | xxx | xxx | xxx |
+| transistor | - | xxx | xxx | xxx |
+| wood | - | xxx | xxx | xxx |
+| zipper | - | xxx | xxx | xxx |
+| Average | - | xxx | xxx | xxx |
 
 ```
 CPU : Intel(R) Xeon(R) Gold 6148 CPU @ 2.40GHz
