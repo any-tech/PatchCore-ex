@@ -130,4 +130,4 @@ dmypy.json
 .idea
 faiss
 result
-.png
+result_*
