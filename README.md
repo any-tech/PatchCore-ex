@@ -259,7 +259,7 @@ GPU : Tesla V100 SXM2
 
 <br/>
 
-### Introduction
+### For your infomation
 
-We have also implemented a similar algorithm, SPADE, so please refer to it.
+We also implement a similar algorithm, SPADE.<br/>
 https://github.com/any-tech/SPADE-fast
