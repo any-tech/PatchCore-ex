@@ -73,70 +73,69 @@ Below is the implementation result of the test set ROCAUC on the `MVTec AD` data
 
 $\%$
 
-| | Paper<br/>\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
+| | Paper<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
 | - | - | - | - | - |
-| bottle | 100.0 | xxx | xxx | xxx |
-| cable | 99.4 | xxx | xxx | xxx |
-| capsule | 97.8 | xxx | xxx | xxx |
-| carpet | 98.7 | xxx | xxx | xxx |
-| grid | 97.9 | xxx | xxx | xxx |
-| hazelnut | 100.0 | xxx | xxx | xxx |
-| leather | 100.0 | xxx | xxx | xxx |
-| metal_nut | 100.0 | xxx | xxx | xxx |
-| pill | 96.0 | xxx | xxx | xxx |
-| screw | 97.0 | xxx | xxx | xxx |
-| tile | 98.9 | xxx | xxx | xxx |
-| toothbrush | 99.7 | xxx | xxx | xxx |
-| transistor | 100.0 | xxx | xxx | xxx |
-| wood | 99.0 | xxx | xxx | xxx |
-| zipper | 99.5 | xxx | xxx | xxx |
-| Average | 99.0 | xxx | xxx | xxx |
+| bottle | 100.0 | 100.0 | 100.0 | 100.0 |
+| cable | 99.4 | 99.6 | 99.9 | 99.6 |
+| capsule | 97.8 | 97.6 | 97.8 | 97.8 |
+| carpet | 98.7 | 98.3 | 98.7 | 98.5 |
+| grid | 97.9 | 97.8 | 98.5 | 98.4 |
+| hazelnut | 100.0 | 100.0 | 100.0 | 100.0 |
+| leather | 100.0 | 100.0 | 100.0 | 100.0 |
+| metal_nut | 100.0 | 100.0 | 100.0 | 99.9 |
+| pill | 96.0 | 96.3 | 96.2 | 96.4 |
+| screw | 97.0 | 97.9 | 98.5 | 98.1 |
+| tile | 98.9 | 99.0 | 99.4 | 99.2 |
+| toothbrush | 99.7 | 99.4 | 99.4 | 100.0 |
+| transistor | 100.0 | 99.8 | 100.0 | 100.0 |
+| wood | 99.0 | 99.1 | 99.0 | 98.9 |
+| zipper | 99.5 | 99.7 | 99.6 | 99.5 |
+| Average | 99.0 | 99.0 | 99.1 | 99.1 |
 
 <br/>
 
 ### 2. Pixel-level anomaly detection accuracy (ROCAUC %)
 
-| | Paper<br/>\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
+| | Paper<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
 | - | - | - | - | - |
-| bottle | 98.6 | xxx | xxx | xxx |
-| cable | 98.5 | xxx | xxx | xxx |
-| capsule | 98.9 | xxx | xxx | xxx |
-| carpet | 99.1 | xxx | xxx | xxx |
-| grid | 98.7 | xxx | xxx | xxx |
-| hazelnut | 98.7 | xxx | xxx | xxx |
-| leather | 99.3 | xxx | xxx | xxx |
-| metal_nut | 98.4 | xxx | xxx | xxx |
-| pill | 97.6 | xxx | xxx | xxx |
-| screw | 99.4 | xxx | xxx | xxx |
-| tile | 95.9 | xxx | xxx | xxx |
-| toothbrush | 98.7 | xxx | xxx | xxx |
-| transistor | 98.7 | xxx | xxx | xxx |
-| wood | 95.1 | xxx | xxx | xxx |
-| zipper | 98.9 | xxx | xxx | xxx |
-| Average | 98.1 | xxx | xxx | xxx |
+| bottle | 98.6 | 98.5 | 98.6 | 98.6 |
+| cable | 98.5 | 98.2 | 98.4 | 98.4 |
+| capsule | 98.9 | 98.8 | 98.9 | 98.9 |
+| carpet | 99.1 | 99.0 | 99.1 | 99.0 |
+| grid | 98.7 | 98.2 | 98.7 | 98.7 |
+| hazelnut | 98.7 | 98.6 | 98.7 | 98.6 |
+| leather | 99.3 | 99.3 | 99.3 | 99.3 |
+| metal_nut | 98.4 | 98.5 | 98.7 | 98.7 |
+| pill | 97.6 | 97.4 | 97.6 | 97.3 |
+| screw | 99.4 | 98.8 | 99.4 | 99.4 |
+| tile | 95.9 | 96.2 | 96.1 | 95.9 |
+| toothbrush | 98.7 | 98.6 | 98.7 | 98.7 |
+| transistor | 96.4 | 94.2 | 96.0 | 95.8 |
+| wood | 95.1 | 95.7 | 95.5 | 95.4 |
+| zipper | 98.9 | 98.9 | 98.9 | 98.9 |
+| Average | 98.1 | 97.9 | 98.2 | 98.1 |
 
 <br/>
 
 ### 3. Processing time (sec)
 
-| | Paper<br/>\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
-| - | - | - | - | - |
-| bottle | - | xxx | xxx | xxx |
-| cable | - | xxx | xxx | xxx |
-| capsule | - | xxx | xxx | xxx |
-| carpet | - | xxx | xxx | xxx |
-| grid | - | xxx | xxx | xxx |
-| hazelnut | - | xxx | xxx | xxx |
-| leather | - | xxx | xxx | xxx |
-| metal_nut | - | xxx | xxx | xxx |
-| pill | - | xxx | xxx | xxx |
-| screw | - | xxx | xxx | xxx |
-| tile | - | xxx | xxx | xxx |
-| toothbrush | - | xxx | xxx | xxx |
-| transistor | - | xxx | xxx | xxx |
-| wood | - | xxx | xxx | xxx |
-| zipper | - | xxx | xxx | xxx |
-| Average | - | xxx | xxx | xxx |
+| | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
+| - | - | - | - |
+| bottle | 18.6 | 26.4 | 38.1 |
+| cable | 28.2 | 35.8 | 49.9 |
+| capsule | 25.6 | 33.7 | 47.1 |
+| carpet | 27.4 | 40.6 | 60.7 |
+| grid | 21.2 | 32.4 | 50.7 |
+| hazelnut | 34.0 | 57.0 | 93.1 |
+| leather | 24.9 | 35.2 | 50.0 |
+| metal_nut | 21.1 | 29.0 | 42.3 |
+| pill | 29.8 | 41.1 | 60.6 |
+| screw | 31.2 | 46.7 | 73.1 |
+| tile | 23.5 | 31.6 | 46.7 |
+| toothbrush | 7.3 | 8.5 | 10.3 |
+| transistor | 21.5 | 29.1 | 41.8 |
+| wood | 22.2 | 32.3 | 48.2 |
+| zipper | 26.4 | 35.2 | 50.2 |
 
 ```
 CPU : Intel(R) Xeon(R) Gold 6148 CPU @ 2.40GHz
@@ -258,4 +257,9 @@ GPU : Tesla V100 SXM2
 - zipper (test case : broken_teeth)
 ![zipper](./assets/localization_zipper_broken_teeth_000_p0100_k01_s029.png)
 
+<br/>
 
+### Introduction
+
+We have also implemented a similar algorithm, SPADE, so please refer to it.
+https://github.com/any-tech/SPADE-fast
