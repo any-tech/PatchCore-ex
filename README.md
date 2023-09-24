@@ -73,8 +73,6 @@ Below is the implementation result of the test set ROCAUC on the `MVTec AD` data
 
 ### 1. Image-level anomaly detection accuracy (ROCAUC %)
 
-$\%$
-
 | | Paper<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
 | - | - | - | - | - |
 | bottle | 100.0 | 100.0 | 100.0 | 100.0 |
