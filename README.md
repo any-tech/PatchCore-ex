@@ -6,6 +6,8 @@ We measured accuracy and speed for percentage_coreset=0.01, 0.1 and 0.25.
 
 This code was implimented with [patchcore-inspection](https://github.com/amazon-science/patchcore-inspection), thanks.
 
+<br/>
+
 ## Prerequisites
 
 - faiss-gpu (easy to install with conda : [ref](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md))
@@ -262,4 +264,4 @@ GPU : Tesla V100 SXM2
 ### For your infomation
 
 We also implement a similar algorithm, SPADE.<br/>
-https://github.com/any-tech/SPADE-fast
+https://github.com/any-tech/SPADE-fast/tree/main
