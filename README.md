@@ -58,7 +58,7 @@ After downloading, place the data as follows:
 
 ## Usage
 
-To test **SPADE** on `MVTec AD` dataset:
+To test **PatchCore** on `MVTec AD` dataset:
 ```
 python main.py
 ```
