@@ -23,6 +23,9 @@ class MVTecDataset:
         cls.imgs_train = SharedMemory.read_img_parallel(files=cls.files_train,
                                                         imgs=cls.imgs_train,
                                                         desc=desc)
+        if ConfigData.shuffle:
+            np.random.seed(ConfigData.seed)
+            cls.imgs_train = np.random.permutation(cls.imgs_train)
 
         # read test data
         cls.files_test = {}

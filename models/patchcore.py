@@ -11,26 +11,28 @@ class PatchCore:
         self.device = cfg_patchcore.device
         self.k = cfg_patchcore.k
         self.dim_coreset_feat = cfg_patchcore.dim_coreset_feat
+        self.num_split_seq = cfg_patchcore.num_split_seq
         self.percentage_coreset = cfg_patchcore.percentage_coreset
         self.dim_sampling = cfg_patchcore.dim_sampling
         self.num_initial_coreset = cfg_patchcore.num_initial_coreset
         self.seed = cfg_patchcore.seed
         self.shape_stretch = cfg_patchcore.shape_stretch
         self.pixel_outer_decay = cfg_patchcore.pixel_outer_decay
+        self.HW_map = HW_map
 
         # prep knn index
         self.index_feat = faiss.GpuIndexFlatL2(faiss.StandardGpuResources(),
                                                self.dim_coreset_feat,
                                                faiss.GpuIndexFlatConfig())
 
-        self.HW_map = HW_map
+        # prep mapper
+        self.mapper = torch.nn.Linear(self.dim_coreset_feat, self.dim_sampling,
+                                      bias=False).to(self.device)
 
     def compute_greedy_coreset_idx(self, feat):
-        mapper = torch.nn.Linear(feat.shape[1], self.dim_sampling,
-                                 bias=False).to(self.device)
         feat = feat.to(self.device)
         with torch.no_grad():
-            feat_proj = mapper(feat)
+            feat_proj = self.mapper(feat)
 
         _num_initial_coreset = np.clip(self.num_initial_coreset,
                                        None, len(feat_proj))
@@ -74,8 +76,10 @@ class PatchCore:
         idx_coreset = np.array(idx_coreset)
         return idx_coreset
 
-    def set_nearest_neighbor(self, feat_train):
+    def reset_neighbor(self):
         self.index_feat.reset()
+
+    def add_neighbor(self, feat_train):
         self.index_feat.add(feat_train.numpy())
 
     def localization(self, feat_test):

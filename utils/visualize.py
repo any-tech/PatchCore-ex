@@ -102,14 +102,13 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test,
             plt.imshow(img_patch)
             plt.title('patch images created with top1-NN')
 
-            filename_out = os.path.join(cfg_draw.path_result, type_data,
-                                        ('localization_%s_%s_%s_p%04d_k%02d' %
-                                         (type_data, type_test, os.path.basename(file),
-                                          (cfg_draw.percentage_coreset * 1000),
-                                          cfg_draw.k)))
-            ext_tmp = '.' + filename_out.split('.')[-1]
             score_tmp = np.max(score_map) / score_max * 100
-            filename_out = filename_out.replace(ext_tmp, '_s%03d.png' % round(score_tmp))
+            filename_out = os.path.join(cfg_draw.path_result, type_data,
+                                        ('localization_%s_%s_%s_p%04d_k%02d_s%03d.png' %
+                                         (type_data, type_test, 
+                                          os.path.basename(file).split('.')[0],
+                                          (cfg_draw.percentage_coreset * 1000),
+                                          cfg_draw.k, round(score_tmp))))
 
             plt.gcf().savefig(filename_out)
             plt.clf()

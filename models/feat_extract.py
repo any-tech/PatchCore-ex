@@ -12,7 +12,6 @@ class FeatExtract:
         self.device = cfg_feat.device
         self.batch_size = cfg_feat.batch_size
         self.shape_input = cfg_feat.SHAPE_INPUT
-        self.device = cfg_feat.device
         self.layer_map = cfg_feat.layer_map
         self.size_patch = cfg_feat.size_patch
         self.dim_each_feat = cfg_feat.dim_each_feat
@@ -113,7 +112,7 @@ class FeatExtract:
                 feat[type_test] = self.patchfy(feat[type_test])
         return feat
 
-    def patchfy(self, feat):
+    def patchfy(self, feat, batch_size_patchfy=2000):
         pbar = tqdm(total=((len(feat) * 3) + 1), desc='patchfy feature')
 
         with torch.no_grad():
@@ -121,9 +120,17 @@ class FeatExtract:
             for i in range(len(feat)):
                 _feat = feat[i]
                 BC_before_unfold = _feat.shape[:2]
-                # (B, C, H, W) -> (B, C, H, W, PH, PW)
+                # (B, C, H, W) -> (B, CPHPW, HW)
+                # print('_feat.shape[:4] =', _feat.shape[:4])
+                # __feat = torch.zeros([*_feat.shape[:4], self.size_patch, self.size_patch])
+                # for i_batch in range(0, len(_feat), batch_size_patchfy):
+                #     print('i_batch =', i_batch)
+                #     feat_tmp = _feat[i_batch:(i_batch + batch_size_patchfy)]
+                #     feat_tmp = self.unfolder(feat_tmp)
+                #     __feat[i_batch:(i_batch + batch_size_patchfy)] = feat_tmp.cpu()
+                # _feat = __feat
                 _feat = self.unfolder(_feat)
-                # (B, C, H, W, PH, PW) -> (B, C, PH, PW, HW)
+                # (B, CPHPW, HW) -> (B, C, PH, PW, HW)
                 _feat = _feat.reshape(*BC_before_unfold,
                                       self.size_patch, self.size_patch, -1)
                 # (B, C, PH, PW, HW) -> (B, HW, C, PW, HW)
@@ -144,11 +151,21 @@ class FeatExtract:
                 # (B, C, PH, PW, H, W) -> (BCPHPW, H, W)
                 _feat = _feat.reshape(-1, *_feat.shape[-2:])
                 # (BCPHPW, H, W) -> (BCPHPW, H_max, W_max)
-                # !!! gpu使って高速化、バッチサイズに基づいて
-                _feat = F.interpolate(_feat.unsqueeze(1),
-                                      size=(self.HW_map()[0], self.HW_map()[1]),
-                                      mode="bilinear", align_corners=False)
-                _feat = _feat.squeeze(1)
+                __feat = torch.zeros([len(_feat), self.HW_map()[0], self.HW_map()[1]])
+                for i_batch in range(0, len(_feat), batch_size_patchfy):
+                    feat_tmp = _feat[i_batch:(i_batch + batch_size_patchfy)]
+                    feat_tmp = feat_tmp.unsqueeze(1).to(self.device)
+                    feat_tmp = F.interpolate(feat_tmp,
+                                             size=(self.HW_map()[0], self.HW_map()[1]),
+                                             mode="bilinear", align_corners=False)
+                    __feat[i_batch:(i_batch + batch_size_patchfy)] = feat_tmp.squeeze(1).cpu()
+                _feat = __feat
+                # _feat = F.interpolate(_feat.unsqueeze(1),
+                #                       size=(self.HW_map()[0], self.HW_map()[1]),
+                #                       mode="bilinear", align_corners=False)
+                # _feat = _feat.squeeze(1)
+                # for i_batch in range(0, len(_feat), 10000):
+                #     print(torch.sum(torch.abs(_feat[i_batch:(i_batch + 10000)] - __feat[i_batch:(i_batch + 10000)])))
                 # (BCPHPW, H_max, W_max) -> (B, C, PH, PW, H_max, W_max)
                 _feat = _feat.reshape(*perm_base_shape[:-2],
                                       self.HW_map()[0], self.HW_map()[1])

@@ -51,13 +51,15 @@ def arg_parser():
     parser.add_argument('-dm', '--dim_merge_feat', type=int, default=1024,
                         help='dimension after layer feature merging (at 2nd adaptive average pooling)')
     # coreset related
-    parser.add_argument('-s', '--seed', type=float, default=0,
+    parser.add_argument('-s', '--seed', type=int, default=0,
                         help='specify a random-seed for k-center-greedy')
+    parser.add_argument('-ns', '--num_split_seq', type=int, default=1,
+                        help='percentage of coreset to all patch features')
     parser.add_argument('-pc', '--percentage_coreset', type=float, default=0.01,
                         help='percentage of coreset to all patch features')
     parser.add_argument('-ds', '--dim_sampling', type=int, default=128,
                         help='dimension to project features for sampling')
-    parser.add_argument('-ni', '--num_initial_coreset', type=int, default=10,
+    parser.add_argument('-ni', '--num_initial_coreset', type=int, default=5,
                         help='number of samples to initially randomly select coreset')
     # Nearest-Neighbor related
     parser.add_argument('-k', '--k', type=int, default=5,
@@ -77,14 +79,35 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
     # read images
     MVTecDataset(type_data)
 
-    # extract features
-    feat_train = feat_ext.extract(MVTecDataset.imgs_train, is_train=True)
-    feat_test = feat_ext.extract(MVTecDataset.imgs_test, is_train=False)
+    # reset neighbor
+    patchcore.reset_neighbor()
 
-    # coreset-reduced patch-feature memory bank
-    idx_coreset = patchcore.compute_greedy_coreset_idx(feat_train)
-    feat_train = feat_train[idx_coreset]
-    patchcore.set_nearest_neighbor(feat_train)
+    # loop of split-sequential to apply k-center-greedy
+    idx_coreset_total = []
+    num_pitch = int(np.ceil(len(MVTecDataset.imgs_train) / patchcore.num_split_seq))
+    for i_split in range(patchcore.num_split_seq):
+        # extract features
+        i_from = i_split * num_pitch
+        i_to = (i_split + 1) * num_pitch
+        print('[split%02d] image index range is %d~%d' % (i_split, i_from, (i_to - 1)))
+        feat_train = feat_ext.extract(MVTecDataset.imgs_train[i_from:i_to], is_train=True)
+
+        # coreset-reduced patch-feature memory bank
+        idx_coreset = patchcore.compute_greedy_coreset_idx(feat_train)
+        feat_train = feat_train[idx_coreset]
+
+        # add feature as neighbor
+        patchcore.add_neighbor(feat_train)
+
+        # stock index
+        offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
+        idx_coreset_total.append(idx_coreset + offset_split)
+
+    # concat index
+    idx_coreset_total = np.hstack(idx_coreset_total)
+
+    # extract features
+    feat_test = feat_ext.extract(MVTecDataset.imgs_test, is_train=False)
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
     D, D_max, I = patchcore.localization(feat_test)
@@ -97,17 +120,17 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
 
     toc(tag=('----> PatchCore processing in %s end, elapsed time' % type_data))
 
-    draw_distance_graph(type_data, cfg_draw, D)
+    draw_distance_graph(type_data, cfg_draw, D, rocauc_img)
     if args.verbose:
         draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, D_max,
                      MVTecDataset.imgs_test, MVTecDataset.files_test,
-                     idx_coreset, I, MVTecDataset.imgs_train, feat_ext.HW_map())
+                     idx_coreset_total, I, MVTecDataset.imgs_train, feat_ext.HW_map())
 
     return [fpr_img, tpr_img, rocauc_img, fpr_pix, tpr_pix, rocauc_pix]
 
 
 def main(args):
-    ConfigData(args)  # static define to speed-up
+    ConfigData(args)  # static define for speed-up
     cfg_feat = ConfigFeat(args)
     cfg_patchcore = ConfigPatchCore(args)
     cfg_draw = ConfigDraw(args)
@@ -138,16 +161,20 @@ def main(args):
         tpr_pix[type_data] = result[4]
         rocauc_pix[type_data] = result[5]
 
-    draw_roc_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, fpr_pix, tpr_pix, rocauc_pix)
+    rocauc_img_mean = np.array([rocauc_img[type_data] for type_data in ConfigData.types_data])
+    rocauc_img_mean = np.mean(rocauc_img_mean)
+    rocauc_pix_mean = np.array([rocauc_pix[type_data] for type_data in ConfigData.types_data])
+    rocauc_pix_mean = np.mean(rocauc_pix_mean)
 
-    rocauc_img_ = np.array([rocauc_img[type_data] for type_data in ConfigData.types_data])
-    rocauc_pix_ = np.array([rocauc_pix[type_data] for type_data in ConfigData.types_data])
+    draw_roc_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, rocauc_img_mean,
+                             fpr_pix, tpr_pix, rocauc_pix, rocauc_pix_mean)
+
     for type_data in ConfigData.types_data:
         print('rocauc_img[%s] = %.3f' % (type_data, rocauc_img[type_data]))
-    print('np.mean(rocauc_img_) = %.3f' % np.mean(rocauc_img_))
+    print('rocauc_img[mean] = %.3f' % rocauc_img_mean)
     for type_data in ConfigData.types_data:
         print('rocauc_pix[%s] = %.3f' % (type_data, rocauc_pix[type_data]))
-    print('np.mean(rocauc_pix_) = %.3f' % np.mean(rocauc_pix_))
+    print('rocauc_pix[mean] = %.3f' % rocauc_pix_mean)
 
 
 if __name__ == '__main__':

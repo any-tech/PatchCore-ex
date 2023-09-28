@@ -14,6 +14,8 @@ class ConfigData:
         cls.path_parent = args.path_parent
         assert os.path.exists(cls.path_parent)
         cls.num_cpu_max = args.num_cpu_max
+        cls.shuffle = (args.num_split_seq > 1)  # for k-center-greedy split
+        cls.seed = args.seed
 
         # input format related
         cls.SHAPE_MIDDLE = (args.size_resize, args.size_resize)  # (H, W)
@@ -72,6 +74,8 @@ class ConfigPatchCore:
         # dimension after layer feature merging (at 2nd adaptive average pooling)
         self.dim_coreset_feat = args.dim_merge_feat
 
+        # number split-sequential to apply k-center-greedy
+        self.num_split_seq = args.num_split_seq
         # percentage of coreset to all patch features
         self.percentage_coreset = args.percentage_coreset
         # dimension to project features for sampling
