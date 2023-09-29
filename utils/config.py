@@ -18,10 +18,14 @@ class ConfigData:
         cls.seed = args.seed
 
         # input format related
-        cls.SHAPE_MIDDLE = (args.size_resize, args.size_resize)  # (H, W)
-        cls.SHAPE_INPUT = (args.size_crop, args.size_crop)  # (H, W)
+        cls.SHAPE_MIDDLE = (args.size_resize[0], args.size_resize[1])  # (H, W)
+        cls.SHAPE_INPUT = (args.size_crop[0], args.size_crop[1])  # (H, W)
         cls.pixel_cut = (int((cls.SHAPE_MIDDLE[0] - cls.SHAPE_INPUT[0]) / 2),
                          int((cls.SHAPE_MIDDLE[1] - cls.SHAPE_INPUT[1]) / 2))  # (H, W)
+
+        # augmantation related
+        cls.flip_horz = args.flip_horz
+        cls.flip_vert = args.flip_vert
 
         # collect types of data
         types_data = [d for d in os.listdir(args.path_parent)
@@ -41,7 +45,7 @@ class ConfigFeat:
         self.batch_size = args.batch_size
 
         # input format related
-        self.SHAPE_INPUT = (args.size_crop, args.size_crop)  # (H, W)
+        self.SHAPE_INPUT = (args.size_crop[0], args.size_crop[1])  # (H, W)
 
         # base network
         self.backbone = args.backbone
@@ -89,7 +93,7 @@ class ConfigPatchCore:
         self.k = args.k
 
         # input format related
-        self.shape_stretch = (args.size_crop, args.size_crop)  # (H, W)
+        self.shape_stretch = (args.size_crop[0], args.size_crop[1])  # (H, W)
 
         # consideration for the outer edge
         self.pixel_outer_decay = args.pixel_outer_decay

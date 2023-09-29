@@ -78,7 +78,7 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test,
             gt = y[type_test][i]
             idx_patch = idx_coreset[I[type_test][i][:, 0]]
 
-            plt.figure(figsize=(8, 14), dpi=100, facecolor='white')
+            plt.figure(figsize=(10, 18), dpi=100, facecolor='white')
             plt.rcParams['font.size'] = 8
 
             plt.subplot2grid((7, 3), (0, 0), rowspan=1, colspan=1)
@@ -129,8 +129,6 @@ def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field):
     x_pitch = np.arange(0, (w - 1 + 1e-10), ((w - 1) / (HW_map[1] - 1)))
     x_pitch = np.round(x_pitch).astype(np.int16)
     x_pitch = x_pitch + w_half
-    # print('y_pitch =', y_pitch)
-    # print('x_pitch =', x_pitch)
     # padding to normal images
     imgs = np.pad(imgs, ((0, 0), (h_half, h_half), (w_half, w_half), (0, 0)))
 
@@ -146,20 +144,12 @@ def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field):
         i_HW = i_patch % (HW_map[0] * HW_map[1])
         i_H = i_HW // HW_map[1]
         i_W = i_HW % HW_map[1]
-        # print('i_patch =', i_patch)
-        # print('i_img =', i_img)
-        # print('i_HW =', i_HW)
-        # print('i_H =', i_H)
-        # print('i_W =', i_W)
 
         img = imgs[i_img]
         y = y_pitch[i_H]
         x = x_pitch[i_W]
-        # print('x =', x)
-        # print('y =', y)
         img_piece = img[(y - h_half):(y + h_half + 1),
                         (x - w_half):(x + w_half + 1)]
-        # print('img_piece.shape =', img_piece.shape)
 
         y = i_y * size_receptive_field
         x = i_x * size_receptive_field

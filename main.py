@@ -29,10 +29,12 @@ def arg_parser():
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
                         help='batch-size for feature extraction by ImageNet model')
-    parser.add_argument('-sr', '--size_resize', type=int, default=256,
+    parser.add_argument('-sr', '--size_resize', nargs=2, type=int, default=[256, 256],
                         help='size of resizing input image')
-    parser.add_argument('-sc', '--size_crop', type=int, default=224,
+    parser.add_argument('-sc', '--size_crop', nargs=2, type=int, default=[224, 224],
                         help='size of cropping after resize')
+    parser.add_argument('-fh', '--flip_horz', action='store_true', help='flip horizontal')
+    parser.add_argument('-fv', '--flip_vert', action='store_true', help='flip vertical')
     # feature extraction related
     parser.add_argument('-b', '--backbone', type=str,
                         default='torchvision.models.wide_resnet50_2',
@@ -59,7 +61,7 @@ def arg_parser():
                         help='percentage of coreset to all patch features')
     parser.add_argument('-ds', '--dim_sampling', type=int, default=128,
                         help='dimension to project features for sampling')
-    parser.add_argument('-ni', '--num_initial_coreset', type=int, default=5,
+    parser.add_argument('-ni', '--num_initial_coreset', type=int, default=10,
                         help='number of samples to initially randomly select coreset')
     # Nearest-Neighbor related
     parser.add_argument('-k', '--k', type=int, default=5,
@@ -82,13 +84,16 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
     # reset neighbor
     patchcore.reset_neighbor()
 
+    if args.verbose:
+        # reset index
+        idx_coreset_total = []
+
     # loop of split-sequential to apply k-center-greedy
-    idx_coreset_total = []
     num_pitch = int(np.ceil(len(MVTecDataset.imgs_train) / patchcore.num_split_seq))
     for i_split in range(patchcore.num_split_seq):
         # extract features
         i_from = i_split * num_pitch
-        i_to = (i_split + 1) * num_pitch
+        i_to = min(((i_split + 1) * num_pitch), len(MVTecDataset.imgs_train))
         print('[split%02d] image index range is %d~%d' % (i_split, i_from, (i_to - 1)))
         feat_train = feat_ext.extract(MVTecDataset.imgs_train[i_from:i_to], is_train=True)
 
@@ -99,12 +104,14 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
         # add feature as neighbor
         patchcore.add_neighbor(feat_train)
 
-        # stock index
-        offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
-        idx_coreset_total.append(idx_coreset + offset_split)
+        if args.verbose:
+            # stock index
+            offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
+            idx_coreset_total.append(idx_coreset + offset_split)
 
-    # concat index
-    idx_coreset_total = np.hstack(idx_coreset_total)
+    if args.verbose:
+        # concat index
+        idx_coreset_total = np.hstack(idx_coreset_total)
 
     # extract features
     feat_test = feat_ext.extract(MVTecDataset.imgs_test, is_train=False)

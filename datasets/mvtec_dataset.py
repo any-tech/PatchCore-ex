@@ -26,6 +26,12 @@ class MVTecDataset:
         if ConfigData.shuffle:
             np.random.seed(ConfigData.seed)
             cls.imgs_train = np.random.permutation(cls.imgs_train)
+        if ConfigData.flip_horz:
+            cls.imgs_train = np.concatenate([cls.imgs_train,
+                                             cls.imgs_train[:, :, ::-1]], axis=0)
+        if ConfigData.flip_vert:
+            cls.imgs_train = np.concatenate([cls.imgs_train,
+                                             cls.imgs_train[:, ::-1]], axis=0)
 
         # read test data
         cls.files_test = {}

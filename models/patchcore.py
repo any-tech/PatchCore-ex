@@ -125,8 +125,8 @@ class PatchCore:
 
         # transform to scoremap
         score_map = D.reshape(*self.HW_map)
-        score_map = cv2.resize(score_map, (self.shape_stretch[0],
-                                           self.shape_stretch[1]))
+        score_map = cv2.resize(score_map, (self.shape_stretch[1],
+                                           self.shape_stretch[0]))
 
         # apply gaussian smoothing on the score map
         score_map_smooth = gaussian_filter(score_map, sigma=4)
