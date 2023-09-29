@@ -1,10 +1,12 @@
-# PatchCore with Explainability
+# PatchCore with some "ex"
 This is an unofficial implementation of the paper [Towards Total Recall in Industrial Anomaly Detection](https://arxiv.org/pdf/2106.08265.pdf).
 <img src="https://github.com/any-tech/PatchCore-ex/blob/main/assets/total_recall.jpg" width=400 link="hoge.com">
 
 We measured accuracy and speed for percentage_coreset=0.01, 0.1 and 0.25.
 
 This code was implimented with [patchcore-inspection](https://github.com/amazon-science/patchcore-inspection), thanks.
+
+Some "ex" are **ex**plainability, **ex**press delivery, fl**ex**ibility, **ex**tra algolithm and so on.
 
 <br/>
 
