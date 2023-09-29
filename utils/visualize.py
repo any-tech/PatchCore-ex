@@ -78,7 +78,8 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test,
             gt = y[type_test][i]
             idx_patch = idx_coreset[I[type_test][i][:, 0]]
 
-            plt.figure(figsize=(10, 18), dpi=100, facecolor='white')
+            plt.figure(figsize=(10 * max(1, cfg_draw.aspect_figure), 18),
+                       dpi=100, facecolor='white')
             plt.rcParams['font.size'] = 8
 
             plt.subplot2grid((7, 3), (0, 0), rowspan=1, colspan=1)

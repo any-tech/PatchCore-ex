@@ -111,5 +111,9 @@ class ConfigDraw:
         # receptive field size
         self.size_receptive_field = args.size_receptive_field
 
+        # aspect_ratio of output figure
+        self.aspect_figure = args.size_crop[1] / args.size_crop[0]  # W / H
+        self.aspect_figure = np.round(self.aspect_figure, decimals=1)
+
         # output path of figure
         self.path_result = args.path_result
