@@ -69,51 +69,46 @@ class FeatExtract:
         return x
 
     # return : is_train=True->torch.Tensor, is_train=False->dict
-    def extract(self, imgs, is_train=True):
-        if is_train:
-            # feature extract for train and aggregate split-image for explain
-            x_batch = []
-            self.feat = []
-            for i, img in tqdm(enumerate(imgs),
-                               desc='extract feature for train (case:good)'):
-                x = self.normalize(img)
-                x_batch.append(x)
+    def extract(self, imgs, batch_size_patchfy=50):
+        # feature extract for train and aggregate split-image for explain
+        x_batch = []
+        self.feat = []
+        for i, img in tqdm(enumerate(imgs),
+                            desc='extract feature for train (case:good)'):
+            x = self.normalize(img)
+            x_batch.append(x)
 
-                if ((len(x_batch) == self.batch_size) | (i == (len(imgs) - 1))):
-                    with torch.no_grad():
-                        _ = self.backbone(torch.vstack(x_batch))
-                    x_batch = []
-
-            feat = []
-            num_layer = len(self.layer_map)
-            for i_layer_map in range(num_layer):
-                feat.append(torch.vstack(self.feat[i_layer_map::num_layer]))
-            feat = self.patchfy(feat)
-        else:
-            # feature extract for test
-            feat = {}
-            for type_test in imgs.keys():
+            if ((len(x_batch) == self.batch_size) | (i == (len(imgs) - 1))):
+                with torch.no_grad():
+                    _ = self.backbone(torch.vstack(x_batch))
                 x_batch = []
-                self.feat = []
-                for i, img in tqdm(enumerate(imgs[type_test]),
-                                   desc='extract feature for test (case:%s)' % type_test):
-                    x = self.normalize(img)
-                    x_batch.append(x)
 
-                    if ((len(x_batch) == self.batch_size) | (i == (len(imgs[type_test]) - 1))):
-                        with torch.no_grad():
-                            _ = self.backbone(torch.vstack(x_batch))
-                        x_batch = []
+        # adjust
+        feat = []
+        num_layer = len(self.layer_map)
+        for i_layer_map in range(num_layer):
+            feat.append(torch.vstack(self.feat[i_layer_map::num_layer]))
 
-                feat[type_test] = []
-                num_layer = len(self.layer_map)
-                for i_layer_map in range(num_layer):
-                    feat[type_test].append(torch.vstack(self.feat[i_layer_map::num_layer]))
-                feat[type_test] = self.patchfy(feat[type_test])
-        return feat
+        # patchfy (consider out of memory)
+        num_patch_per_image = self.HW_map()[0] * self.HW_map()[1]
+        num_patch = len(imgs) * num_patch_per_image
+        feat_patchfy = torch.zeros(num_patch, self.dim_merge_feat)
 
-    def patchfy(self, feat, batch_size_patchfy=2000):
-        pbar = tqdm(total=((len(feat) * 3) + 1), desc='patchfy feature')
+        num_patchfy_process = (len(feat) * 3) + 1
+        num_iter = np.ceil(len(imgs) / batch_size_patchfy)
+        pbar = tqdm(total=int(num_patchfy_process * num_iter), desc='patchfy feature')
+        for i_batch in range(0, len(imgs), batch_size_patchfy):
+            feat_tmp = []
+            for feat_layer in feat:
+                feat_tmp.append(feat_layer[i_batch:(i_batch + batch_size_patchfy)])
+            i_from = i_batch * num_patch_per_image
+            i_to = (i_batch + batch_size_patchfy) * num_patch_per_image
+            feat_patchfy[i_from:i_to] = self.patchfy(feat_tmp, pbar)
+        pbar.close()
+
+        return feat_patchfy
+
+    def patchfy(self, feat, pbar, batch_size_interp=2000):
 
         with torch.no_grad():
             # unfold
@@ -121,14 +116,6 @@ class FeatExtract:
                 _feat = feat[i]
                 BC_before_unfold = _feat.shape[:2]
                 # (B, C, H, W) -> (B, CPHPW, HW)
-                # print('_feat.shape[:4] =', _feat.shape[:4])
-                # __feat = torch.zeros([*_feat.shape[:4], self.size_patch, self.size_patch])
-                # for i_batch in range(0, len(_feat), batch_size_patchfy):
-                #     print('i_batch =', i_batch)
-                #     feat_tmp = _feat[i_batch:(i_batch + batch_size_patchfy)]
-                #     feat_tmp = self.unfolder(feat_tmp)
-                #     __feat[i_batch:(i_batch + batch_size_patchfy)] = feat_tmp.cpu()
-                # _feat = __feat
                 _feat = self.unfolder(_feat)
                 # (B, CPHPW, HW) -> (B, C, PH, PW, HW)
                 _feat = _feat.reshape(*BC_before_unfold,
@@ -152,13 +139,13 @@ class FeatExtract:
                 _feat = _feat.reshape(-1, *_feat.shape[-2:])
                 # (BCPHPW, H, W) -> (BCPHPW, H_max, W_max)
                 __feat = torch.zeros([len(_feat), self.HW_map()[0], self.HW_map()[1]])
-                for i_batch in range(0, len(_feat), batch_size_patchfy):
-                    feat_tmp = _feat[i_batch:(i_batch + batch_size_patchfy)]
+                for i_batch in range(0, len(_feat), batch_size_interp):
+                    feat_tmp = _feat[i_batch:(i_batch + batch_size_interp)]
                     feat_tmp = feat_tmp.unsqueeze(1).to(self.device)
                     feat_tmp = F.interpolate(feat_tmp,
                                              size=(self.HW_map()[0], self.HW_map()[1]),
                                              mode="bilinear", align_corners=False)
-                    __feat[i_batch:(i_batch + batch_size_patchfy)] = feat_tmp.squeeze(1).cpu()
+                    __feat[i_batch:(i_batch + batch_size_interp)] = feat_tmp.squeeze(1).cpu()
                 _feat = __feat
                 # _feat = F.interpolate(_feat.unsqueeze(1),
                 #                       size=(self.HW_map()[0], self.HW_map()[1]),
@@ -203,5 +190,4 @@ class FeatExtract:
             feat = feat.reshape(len(feat), -1)
             pbar.update(1)
 
-        pbar.close()
         return feat

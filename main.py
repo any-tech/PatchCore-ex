@@ -94,8 +94,9 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
         # extract features
         i_from = i_split * num_pitch
         i_to = min(((i_split + 1) * num_pitch), len(MVTecDataset.imgs_train))
-        print('[split%02d] image index range is %d~%d' % (i_split, i_from, (i_to - 1)))
-        feat_train = feat_ext.extract(MVTecDataset.imgs_train[i_from:i_to], is_train=True)
+        if (patchcore.num_split_seq > 1):
+            print('[split%02d] image index range is %d~%d' % (i_split, i_from, (i_to - 1)))
+        feat_train = feat_ext.extract(MVTecDataset.imgs_train[i_from:i_to])
 
         # coreset-reduced patch-feature memory bank
         idx_coreset = patchcore.compute_greedy_coreset_idx(feat_train)
@@ -114,7 +115,9 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
         idx_coreset_total = np.hstack(idx_coreset_total)
 
     # extract features
-    feat_test = feat_ext.extract(MVTecDataset.imgs_test, is_train=False)
+    feat_test = {}
+    for type_test in MVTecDataset.imgs_test.keys():
+        feat_test[type_test] = feat_ext.extract(MVTecDataset.imgs_test[type_test])
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
     D, D_max, I = patchcore.localization(feat_test)
