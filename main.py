@@ -26,6 +26,8 @@ def arg_parser():
                         help='save visualization of localization')
     parser.add_argument('-srf', '--size_receptive_field', type=int, default=15,
                         help='estimate and specify receptive field size (odd number)')
+    parser.add_argument('-mv', '--mode_visualize', type=str, default='eval',
+                        choices=['eval', 'infer'], help='set mode, [eval] or [infer]')
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
                         help='batch-size for feature extraction by ImageNet model')
@@ -35,13 +37,14 @@ def arg_parser():
                         help='size of cropping after resize')
     parser.add_argument('-fh', '--flip_horz', action='store_true', help='flip horizontal')
     parser.add_argument('-fv', '--flip_vert', action='store_true', help='flip vertical')
+    parser.add_argument('-tt', '--types_data', nargs='*', type=str, default=None)
     # feature extraction related
     parser.add_argument('-b', '--backbone', type=str,
                         default='torchvision.models.wide_resnet50_2',
                         help='specify torchvision model with the full path')
     parser.add_argument('-w', '--weight', type=str,
                         default='torchvision.models.Wide_ResNet50_2_Weights.IMAGENET1K_V1',
-                        help='specify the trained weights of torchvision model with the full path.')
+                        help='specify the trained weights of torchvision model with the full path')
     parser.add_argument('-lm', '--layer_map', nargs='+', type=str,
                         default=['layer2[-1]', 'layer3[-1]'],
                         help='specify layers to extract feature map')
@@ -117,7 +120,8 @@ def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
     # extract features
     feat_test = {}
     for type_test in MVTecDataset.imgs_test.keys():
-        feat_test[type_test] = feat_ext.extract(MVTecDataset.imgs_test[type_test])
+        feat_test[type_test] = feat_ext.extract(MVTecDataset.imgs_test[type_test],
+                                                case='test (case:%s)' % type_test)
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
     D, D_max, I = patchcore.localization(feat_test)

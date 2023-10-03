@@ -51,7 +51,7 @@ class MVTecDataset:
         # read ground truth of test data
         for type_test in cls.types_test:
             # create memory shared variable
-            if type_test == 'good':
+            if (type_test == 'good'):
                 cls.gts_test[type_test] = np.zeros([len(cls.files_test[type_test]),
                                                     ConfigData.SHAPE_INPUT[0],
                                                     ConfigData.SHAPE_INPUT[1]], dtype=np.uint8)

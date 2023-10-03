@@ -74,34 +74,49 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test,
             file = files_test[type_test][i]
             img = imgs_test[type_test][i]
             score_map = D[type_test][i]
+            idx_patch = idx_coreset[I[type_test][i][:, 0]]
             score_max = D_max
             gt = y[type_test][i]
-            idx_patch = idx_coreset[I[type_test][i][:, 0]]
+            img_patch = pickup_patch(idx_patch, imgs_train, HW_map,
+                                     cfg_draw.size_receptive_field)
 
             plt.figure(figsize=(10 * max(1, cfg_draw.aspect_figure), 18),
                        dpi=100, facecolor='white')
-            plt.rcParams['font.size'] = 8
+            plt.rcParams['font.size'] = 10
 
-            plt.subplot2grid((7, 3), (0, 0), rowspan=1, colspan=1)
-            plt.imshow(img)
-            plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
-            plt.subplot2grid((7, 3), (0, 1), rowspan=1, colspan=1)
-            plt.imshow(gt)
-            plt.subplot2grid((7, 3), (0, 2), rowspan=1, colspan=1)
-            plt.imshow(score_map)
-            plt.colorbar()
-            plt.title('max score : %.2f' % score_max)
-            plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
-            plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
-            plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
-            plt.imshow((img.astype(np.float32) *
-                        (score_map / score_max)[..., None]).astype(np.uint8))
+            if (cfg_draw.mode_visualize == 'eval'):
+                plt.subplot2grid((7, 3), (0, 0), rowspan=1, colspan=1)
+                plt.imshow(img)
+                plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
+                plt.subplot2grid((7, 3), (0, 1), rowspan=1, colspan=1)
+                plt.imshow(gt)
+                plt.subplot2grid((7, 3), (0, 2), rowspan=1, colspan=1)
+                plt.imshow(score_map)
+                plt.colorbar()
+                plt.title('max score : %.2f' % score_max)
+                plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
+                plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
+                plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
+                plt.imshow((img.astype(np.float32) *
+                            (score_map / score_max)[..., None]).astype(np.uint8))
 
-            img_patch = pickup_patch(idx_patch, imgs_train, HW_map,
-                                     cfg_draw.size_receptive_field)
-            plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
-            plt.imshow(img_patch)
-            plt.title('patch images created with top1-NN')
+                plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
+                plt.imshow(img_patch, interpolation='none')
+                plt.title('patch images created with top1-NN')
+            elif (cfg_draw.mode_visualize == 'infer'):
+                plt.subplot2grid((5, 2), (0, 0), rowspan=1, colspan=1)
+                plt.imshow(img)
+                plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
+                plt.subplot2grid((5, 2), (0, 1), rowspan=1, colspan=1)
+                plt.imshow(score_map)
+                plt.colorbar()
+                plt.title('max score : %.2f' % score_max)
+                plt.subplot2grid((5, 1), (1, 0), rowspan=2, colspan=1)
+                plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
+
+                plt.subplot2grid((5, 1), (3, 0), rowspan=2, colspan=1)
+                plt.imshow(img_patch, interpolation='none')
+                plt.title('patch images created with top1-NN')
 
             score_tmp = np.max(score_map) / score_max * 100
             filename_out = os.path.join(cfg_draw.path_result, type_data,

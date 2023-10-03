@@ -69,16 +69,17 @@ class FeatExtract:
         return x
 
     # return : is_train=True->torch.Tensor, is_train=False->dict
-    def extract(self, imgs, batch_size_patchfy=50):
+    def extract(self, imgs, case='train (case:good)', batch_size_patchfy=50):
         # feature extract for train and aggregate split-image for explain
         x_batch = []
         self.feat = []
-        for i, img in tqdm(enumerate(imgs),
-                            desc='extract feature for train (case:good)'):
+        for i_img in tqdm(range(len(imgs)),
+                          desc='extract feature for %s' % case):
+            img = imgs[i_img]
             x = self.normalize(img)
             x_batch.append(x)
 
-            if ((len(x_batch) == self.batch_size) | (i == (len(imgs) - 1))):
+            if ((len(x_batch) == self.batch_size) | (i_img == (len(imgs) - 1))):
                 with torch.no_grad():
                     _ = self.backbone(torch.vstack(x_batch))
                 x_batch = []

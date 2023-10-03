@@ -28,9 +28,14 @@ class ConfigData:
         cls.flip_vert = args.flip_vert
 
         # collect types of data
-        types_data = [d for d in os.listdir(args.path_parent)
-                      if os.path.isdir(os.path.join(args.path_parent, d))]
-        cls.types_data = np.sort(np.array(types_data))
+        if args.types_data is None:
+            types_data = [d for d in os.listdir(args.path_parent)
+                          if os.path.isdir(os.path.join(args.path_parent, d))]
+            cls.types_data = np.sort(np.array(types_data))
+        else:
+            for type_data in args.types_data:
+                assert os.path.exists(os.path.join(args.path_parent, type_data))
+            cls.types_data = np.sort(np.array(args.types_data))
 
 
 class ConfigFeat:
@@ -114,6 +119,9 @@ class ConfigDraw:
         # aspect_ratio of output figure
         self.aspect_figure = args.size_crop[1] / args.size_crop[0]  # W / H
         self.aspect_figure = np.round(self.aspect_figure, decimals=1)
+
+        # visualize mode
+        self.mode_visualize = args.mode_visualize
 
         # output path of figure
         self.path_result = args.path_result
