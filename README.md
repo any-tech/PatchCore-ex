@@ -123,21 +123,21 @@ Below is the implementation result of the test set ROCAUC on the `MVTec AD` data
 
 | | This Repo<br/>$\\%_{core}$=0.01 | This Repo<br/>$\\%_{core}$=0.1 | This Repo<br/>$\\%_{core}$=0.25 |
 | - | - | - | - |
-| bottle | 18.6 | 26.4 | 38.1 |
-| cable | 28.2 | 35.8 | 49.9 |
-| capsule | 25.6 | 33.7 | 47.1 |
-| carpet | 27.4 | 40.6 | 60.7 |
-| grid | 21.2 | 32.4 | 50.7 |
-| hazelnut | 34.0 | 57.0 | 93.1 |
-| leather | 24.9 | 35.2 | 50.0 |
-| metal_nut | 21.1 | 29.0 | 42.3 |
-| pill | 29.8 | 41.1 | 60.6 |
-| screw | 31.2 | 46.7 | 73.1 |
-| tile | 23.5 | 31.6 | 46.7 |
-| toothbrush | 7.3 | 8.5 | 10.3 |
-| transistor | 21.5 | 29.1 | 41.8 |
-| wood | 22.2 | 32.3 | 48.2 |
-| zipper | 26.4 | 35.2 | 50.2 |
+| bottle | 14.2 | 21.3 | 33.0 |
+| cable | 22.9 | 30.3 | 44.6 |
+| capsule | 20.4 | 27.3 | 39.8 |
+| carpet | 22.4 | 32.6 | 52.7 |
+| grid | 16.3 | 26.3 | 44.3 |
+| hazelnut | 25.9 | 46.4 | 82.1 |
+| leather | 20.8 | 28.5 | 44.0 |
+| metal_nut | 16.8 | 23.8 | 36.3 |
+| pill | 23.3 | 34.2 | 52.6 |
+| screw | 22.4 | 37.7 | 63.9 |
+| tile | 18.4 | 26.2 | 40.7 |
+| toothbrush | 5.8 | 6.7 | 8.0 |
+| transistor | 17.2 | 23.9 | 35.9 |
+| wood | 18.0 | 26.5 | 42.1 |
+| zipper | 20.5 | 29.0 | 44.2 |
 
 ```
 CPU : Intel(R) Xeon(R) Gold 6148 CPU @ 2.40GHz
