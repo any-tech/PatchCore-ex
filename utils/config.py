@@ -71,6 +71,8 @@ class ConfigFeat:
         self.MEAN = MEAN.to(self.device)
         self.STD = STD.to(self.device)
 
+        self.merge_layer_index = args.merge_layer_index
+
 
 class ConfigPatchCore:
     def __init__(self, args):
