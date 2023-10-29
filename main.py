@@ -49,8 +49,8 @@ def arg_parser():
                         default=['layer2[-1]', 'layer3[-1]'],
                         help='specify layers to extract feature map')
 
-    parser.add_argument('--merge_layer_index', type=int, default=0,
-                        help='index, which specifies a layer with spatial information as a reference when merging layer')
+    parser.add_argument('--merge_dst_layer', type=str, default='layer2[-1]',
+                        help='layer, which specifies a layer with spatial information as a reference when merging layer')
 
     # patchification related
     parser.add_argument('-sp', '--size_patch', type=int, default=3,

@@ -18,7 +18,7 @@ class FeatExtract:
         self.dim_merge_feat = cfg_feat.dim_merge_feat
         self.MEAN = cfg_feat.MEAN
         self.STD = cfg_feat.STD
-        self.merge_layer_index = cfg_feat.merge_layer_index
+        self.merge_dst_index = self.layer_map.index(cfg_feat.merge_dst_layer)
 
         self.padding = int((self.size_patch - 1) / 2)
         self.stride = 1  # fixed temporarily...
@@ -57,8 +57,8 @@ class FeatExtract:
     def hook(self, module, input, output):
         self.feat.append(output.detach().cpu())
 
-    def HW_map(self, index=0):
-        return self.patch_shapes[index]
+    def HW_map(self):
+        return self.patch_shapes[self.merge_dst_index]
 
     def normalize(self, input):
         x = torch.from_numpy(input.astype(np.float32))
@@ -92,7 +92,7 @@ class FeatExtract:
             feat.append(torch.vstack(self.feat[i_layer_map::num_layer]))
 
         # patchfy (consider out of memory)
-        num_patch_per_image = self.HW_map(self.merge_layer_index)[0] * self.HW_map(self.merge_layer_index)[1]
+        num_patch_per_image = self.HW_map()[0] * self.HW_map()[1]
         num_patch = len(imgs) * num_patch_per_image
         feat_patchfy = torch.zeros(num_patch, self.dim_merge_feat)
 
@@ -129,7 +129,7 @@ class FeatExtract:
 
             # expand small feat to fit large features
             for i in range(0, len(feat)):
-                if i == self.merge_layer_index:
+                if i == self.merge_dst_index:
                     continue
 
                 _feat = feat[i]
@@ -143,12 +143,12 @@ class FeatExtract:
                 # (B, C, PH, PW, H, W) -> (BCPHPW, H, W)
                 _feat = _feat.reshape(-1, *_feat.shape[-2:])
                 # (BCPHPW, H, W) -> (BCPHPW, H_max, W_max)
-                feat_dst = torch.zeros([len(_feat), self.HW_map(self.merge_layer_index)[0], self.HW_map(self.merge_layer_index)[1]])
+                feat_dst = torch.zeros([len(_feat), self.HW_map()[0], self.HW_map()[1]])
                 for i_batch in range(0, len(_feat), batch_size_interp):
                     feat_tmp = _feat[i_batch:(i_batch + batch_size_interp)]
                     feat_tmp = feat_tmp.unsqueeze(1).to(self.device)
                     feat_tmp = F.interpolate(feat_tmp,
-                                             size=(self.HW_map(self.merge_layer_index)[0], self.HW_map(self.merge_layer_index)[1]),
+                                             size=(self.HW_map()[0], self.HW_map()[1]),
                                              mode="bilinear", align_corners=False)
                     feat_dst[i_batch:(i_batch + batch_size_interp)] = feat_tmp.squeeze(1).cpu()
                 _feat = feat_dst
@@ -160,7 +160,7 @@ class FeatExtract:
                 #     print(torch.sum(torch.abs(_feat[i_batch:(i_batch + 10000)] - __feat[i_batch:(i_batch + 10000)])))
                 # (BCPHPW, H_max, W_max) -> (B, C, PH, PW, H_max, W_max)
                 _feat = _feat.reshape(*perm_base_shape[:-2],
-                                      self.HW_map(self.merge_layer_index)[0], self.HW_map(self.merge_layer_index)[1])
+                                      self.HW_map()[0], self.HW_map()[1])
                 # (B, C, PH, PW, H_max, W_max) -> (B, H_max, W_max, C, PH, PW)
                 _feat = _feat.permute(0, -2, -1, 1, 2, 3)
                 # (B, H_max, W_max, C, PH, PW) -> (B, H_maxW_max, C, PH, PW)
