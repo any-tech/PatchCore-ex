@@ -18,7 +18,7 @@ class FeatExtract:
         self.dim_merge_feat = cfg_feat.dim_merge_feat
         self.MEAN = cfg_feat.MEAN
         self.STD = cfg_feat.STD
-        self.merge_dst_index = self.layer_map.index(cfg_feat.merge_dst_layer)
+        self.merge_dst_index = self.layer_map.index(cfg_feat.layer_merge_ref)
 
         self.padding = int((self.size_patch - 1) / 2)
         self.stride = 1  # fixed temporarily...
