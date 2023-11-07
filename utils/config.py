@@ -105,6 +105,8 @@ class ConfigPatchCore:
         # consideration for the outer edge
         self.pixel_outer_decay = args.pixel_outer_decay
 
+        self.faiss_save_dir = args.faiss_save_dir
+
 
 class ConfigDraw:
     def __init__(self, args):

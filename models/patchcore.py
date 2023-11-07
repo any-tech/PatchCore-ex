@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import cv2
 from tqdm import tqdm
@@ -28,6 +30,9 @@ class PatchCore:
         # prep mapper
         self.mapper = torch.nn.Linear(self.dim_coreset_feat, self.dim_sampling,
                                       bias=False).to(self.device)
+
+        self.faiss_save_dir = cfg_patchcore.faiss_save_dir
+        os.makedirs(self.faiss_save_dir, exist_ok=True)
 
     def compute_greedy_coreset_idx(self, feat):
         feat = feat.to(self.device)
@@ -81,6 +86,15 @@ class PatchCore:
 
     def add_neighbor(self, feat_train):
         self.index_feat.add(feat_train.numpy())
+
+    def save_neighbor(self, type_data):
+        faiss_save_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
+        cpu_index = faiss.index_gpu_to_cpu(self.index_feat)
+        faiss.write_index(cpu_index, faiss_save_path)
+
+    def load_neighbor(self, type_data):
+        faiss_idx_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
+        self.index_feat = faiss.read_index(faiss_idx_path)
 
     def localization(self, feat_test):
         D = {}
