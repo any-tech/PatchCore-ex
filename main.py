@@ -151,8 +151,8 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
     fpr_img, tpr_img, thr_img, rocauc_img = calc_imagewise_metrics(D)
     print('%s imagewise ROCAUC: %.3f' % (type_data, rocauc_img))
 
-    best_img_thr_norm, best_img_thr_idx_norm = calc_roc_best_score(fpr_img, tpr_img, thr_img)
-    save_best_thr(args, best_img_thr_norm, best_img_thr_idx_norm, type_data)
+    best_img_thr, best_img_thr_idx = calc_roc_best_score(fpr_img, tpr_img, thr_img)
+    save_best_thr(args, best_img_thr, best_img_thr_idx, type_data)
 
     fpr_pix, tpr_pix, rocauc_pix = calc_pixelwise_metrics(D, MVTecDataset.gts_test)
     print('%s pixelwise ROCAUC: %.3f' % (type_data, rocauc_pix))

@@ -107,16 +107,14 @@ class PatchCore:
 
             # loop for test data
             _feat_test = feat_test[type_test]
-            _feat_test = _feat_test.reshape(-1, (self.HW_map[0] * self.HW_map[1]),
-                                            self.dim_coreset_feat)
+            _feat_test = _feat_test.reshape(-1, (self.HW_map[0] * self.HW_map[1]), self.dim_coreset_feat)
             _feat_test = _feat_test.numpy()
             num_data = len(_feat_test)
-            for i in tqdm(range(num_data),
-                          desc='localization (case:%s)' % type_test):
+            for i in tqdm(range(num_data), desc='localization (case:%s)' % type_test):
                 # measure distance pixelwise
                 score_map, I_tmp = self.measure_dist_pixelwise(feat_test=_feat_test[i])
                 # adjust score of outer-pixel (provisional heuristic algorithm)
-                if (self.pixel_outer_decay > 0):
+                if self.pixel_outer_decay > 0:
                     score_map[:self.pixel_outer_decay, :] *= 0.6
                     score_map[-self.pixel_outer_decay:, :] *= 0.6
                     score_map[:, :self.pixel_outer_decay] *= 0.6
@@ -139,8 +137,7 @@ class PatchCore:
 
         # transform to scoremap
         score_map = D.reshape(*self.HW_map)
-        score_map = cv2.resize(score_map, (self.shape_stretch[1],
-                                           self.shape_stretch[0]))
+        score_map = cv2.resize(score_map, (self.shape_stretch[1], self.shape_stretch[0]))
 
         # apply gaussian smoothing on the score map
         score_map_smooth = gaussian_filter(score_map, sigma=4)

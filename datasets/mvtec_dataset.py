@@ -87,18 +87,3 @@ class MVTecDatasetInfer:
             cls.imgs_test[type_test] = SharedMemory.read_img_parallel(files=cls.files_test[type_test],
                                                                       imgs=cls.imgs_test[type_test],
                                                                       desc=desc)
-
-        # read ground truth of test data
-        for type_test in cls.types_test:
-            # create memory shared variable
-            if type_test == 'good':
-                cls.gts_test[type_test] = np.zeros([len(cls.files_test[type_test]),
-                                                    ConfigData.SHAPE_INPUT[0],
-                                                    ConfigData.SHAPE_INPUT[1]], dtype=np.uint8)
-            else:
-                desc = 'read ground-truths for test (case:%s)' % type_test
-                cls.gts_test[type_test] = None
-                cls.gts_test[type_test] = SharedMemory.read_img_parallel(files=cls.files_test[type_test],
-                                                                         imgs=cls.gts_test[type_test],
-                                                                         is_gt=True,
-                                                                         desc=desc)

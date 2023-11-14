@@ -124,37 +124,6 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
 
     # reset neighbor
     patchcore.reset_neighbor()
-
-    if args.verbose:
-        # reset index
-        idx_coreset_total = []
-
-    # # loop of split-sequential to apply k-center-greedy
-    # num_pitch = int(np.ceil(len(MVTecDataset.imgs_train) / patchcore.num_split_seq))
-    # for i_split in range(patchcore.num_split_seq):
-    #     # extract features
-    #     i_from = i_split * num_pitch
-    #     i_to = min(((i_split + 1) * num_pitch), len(MVTecDataset.imgs_train))
-    #     if (patchcore.num_split_seq > 1):
-    #         print('[split%02d] image index range is %d~%d' % (i_split, i_from, (i_to - 1)))
-    #     feat_train = feat_ext.extract(MVTecDataset.imgs_train[i_from:i_to])
-    #
-    #     # coreset-reduced patch-feature memory bank
-    #     idx_coreset = patchcore.compute_greedy_coreset_idx(feat_train)
-    #     feat_train = feat_train[idx_coreset]
-    #
-    #     # add feature as neighbor
-    #     patchcore.add_neighbor(feat_train)
-    #
-    #     if args.verbose:
-    #         # stock index
-    #         offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
-    #         idx_coreset_total.append(idx_coreset + offset_split)
-
-    # if args.verbose:
-    #     # concat index
-    #     idx_coreset_total = np.hstack(idx_coreset_total)
-
     patchcore.load_neighbor(type_data)
 
     # extract features
@@ -164,29 +133,26 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
     D, D_max, I = patchcore.localization(feat_test)
+    if args.verbose:
+        draw_heatmap(
+            type_data,
+            cfg_draw,
+            D,
+            MVTecDatasetInfer.gts_test,
+            D_max,
+            MVTecDatasetInfer.imgs_test,
+            MVTecDatasetInfer.files_test,
+            None,
+            I,
+            None,
+            feat_ext.HW_map()
+        )
+
     img_thr = read_best_thr(args, type_data)
 
     df_result = inference(D, MVTecDatasetInfer.files_test, img_thr)
     save_path = os.path.join(args.path_result, type_data, f'{type_data}_result.csv')
     df_result.to_csv(save_path)
-
-
-    # measure per image
-    fpr_img, tpr_img, thr_img, rocauc_img = calc_imagewise_metrics(D)
-    print('%s imagewise ROCAUC: %.3f' % (type_data, rocauc_img))
-
-    fpr_pix, tpr_pix, rocauc_pix = calc_pixelwise_metrics(D, MVTecDatasetInfer.gts_test)
-    print('%s pixelwise ROCAUC: %.3f' % (type_data, rocauc_pix))
-
-    toc(tag=('----> PatchCore processing in %s end, elapsed time' % type_data))
-
-    draw_distance_graph(type_data, cfg_draw, D, rocauc_img)
-    if args.verbose:
-        draw_heatmap(type_data, cfg_draw, D, MVTecDatasetInfer.gts_test, D_max,
-                     MVTecDatasetInfer.imgs_test, MVTecDatasetInfer.files_test,
-                     idx_coreset_total, I, MVTecDatasetInfer.imgs_train, feat_ext.HW_map())
-
-    return [fpr_img, tpr_img, rocauc_img, fpr_pix, tpr_pix, rocauc_pix]
 
 
 def main(args):
@@ -202,40 +168,9 @@ def main(args):
     for type_data in ConfigData.types_data:
         os.makedirs(os.path.join(args.path_result, type_data), exist_ok=True)
 
-    fpr_img = {}
-    tpr_img = {}
-    rocauc_img = {}
-    fpr_pix = {}
-    tpr_pix = {}
-    rocauc_pix = {}
-
     # loop for types of data
     for type_data in ConfigData.types_data:
-        result = apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw)
-
-        fpr_img[type_data] = result[0]
-        tpr_img[type_data] = result[1]
-        rocauc_img[type_data] = result[2]
-
-        fpr_pix[type_data] = result[3]
-        tpr_pix[type_data] = result[4]
-        rocauc_pix[type_data] = result[5]
-
-    rocauc_img_mean = np.array([rocauc_img[type_data] for type_data in ConfigData.types_data])
-    rocauc_img_mean = np.mean(rocauc_img_mean)
-    rocauc_pix_mean = np.array([rocauc_pix[type_data] for type_data in ConfigData.types_data])
-    rocauc_pix_mean = np.mean(rocauc_pix_mean)
-
-    draw_roc_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, rocauc_img_mean,
-                   fpr_pix, tpr_pix, rocauc_pix, rocauc_pix_mean)
-
-    for type_data in ConfigData.types_data:
-        print('rocauc_img[%s] = %.3f' % (type_data, rocauc_img[type_data]))
-    print('rocauc_img[mean] = %.3f' % rocauc_img_mean)
-
-    for type_data in ConfigData.types_data:
-        print('rocauc_pix[%s] = %.3f' % (type_data, rocauc_pix[type_data]))
-    print('rocauc_pix[mean] = %.3f' % rocauc_pix_mean)
+        apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw)
 
 
 if __name__ == '__main__':
