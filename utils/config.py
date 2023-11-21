@@ -107,6 +107,8 @@ class ConfigPatchCore:
 
         self.faiss_save_dir = args.faiss_save_dir
 
+        self.coreset_patch_save_dir = args.coreset_patch_save_dir
+
 
 class ConfigDraw:
     def __init__(self, args):

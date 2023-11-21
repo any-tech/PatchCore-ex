@@ -34,6 +34,9 @@ class PatchCore:
         self.faiss_save_dir = cfg_patchcore.faiss_save_dir
         os.makedirs(self.faiss_save_dir, exist_ok=True)
 
+        self.coreset_patch_save_dir = cfg_patchcore.coreset_patch_save_dir
+        os.makedirs(self.coreset_patch_save_dir, exist_ok=True)
+
     def compute_greedy_coreset_idx(self, feat):
         feat = feat.to(self.device)
         with torch.no_grad():
@@ -143,3 +146,51 @@ class PatchCore:
         score_map_smooth = gaussian_filter(score_map, sigma=4)
 
         return score_map_smooth, I
+
+    def pickup_patch(self, idx_patch, imgs, HW_map, size_receptive_field):
+        h = imgs.shape[-3]
+        w = imgs.shape[-2]
+
+        # calculate half size for split
+        h_half = int((size_receptive_field - 1) / 2)
+        w_half = int((size_receptive_field - 1) / 2)
+
+        # calculate center-coordinates of split-image
+        y_pitch = np.arange(0, (h - 1 + 1e-10), ((h - 1) / (HW_map[0] - 1)))
+        y_pitch = np.round(y_pitch).astype(np.int16)
+        y_pitch = y_pitch + h_half
+        x_pitch = np.arange(0, (w - 1 + 1e-10), ((w - 1) / (HW_map[1] - 1)))
+        x_pitch = np.round(x_pitch).astype(np.int16)
+        x_pitch = x_pitch + w_half
+        # padding to normal images
+        imgs = np.pad(imgs, ((0, 0), (h_half, h_half), (w_half, w_half), (0, 0)))
+
+        img_piece_list = []
+        for i_patch in idx_patch:
+            i_img = i_patch // (HW_map[0] * HW_map[1])
+            i_HW = i_patch % (HW_map[0] * HW_map[1])
+            i_H = i_HW // HW_map[1]
+            i_W = i_HW % HW_map[1]
+
+            img = imgs[i_img]
+            y = y_pitch[i_H]
+            x = x_pitch[i_W]
+            img_piece = img[(y - h_half):(y + h_half + 1), (x - w_half):(x + w_half + 1)]
+            img_piece_list.append(img_piece)
+
+        img_piece_array = np.stack(img_piece_list)
+
+        return img_piece_array
+
+    def save_coreset_patch(self, idx_coreset, type_data, image_train, HW_map, cfg_draw):
+        idx_patch = np.arange(0, idx_coreset.shape[0])
+        img_patch = self.pickup_patch(idx_patch, image_train, HW_map, cfg_draw.size_receptive_field)
+
+        file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch.npy')
+        np.save(file_path, img_patch)
+
+    def load_coreset_patch(self, type_data):
+            file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch.npy')
+            coreset_patch = np.load(file_path)
+
+            return coreset_patch

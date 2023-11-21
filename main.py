@@ -57,6 +57,7 @@ def arg_parser():
                         help='layer, which specifies a layer with spatial information as a reference when merging layer')
 
     parser.add_argument('--faiss_save_dir', type=str, default='output', help='Specify the directory to output faiss index')
+    parser.add_argument('--coreset_patch_save_dir', type=str, default='output', help='Specify where to save coreset patch')
 
     # patchification related
     parser.add_argument('-sp', '--size_patch', type=int, default=3,
@@ -137,6 +138,7 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
     if args.verbose:
         # concat index
         idx_coreset_total = np.hstack(idx_coreset_total)
+        patchcore.save_coreset_patch(idx_coreset_total, type_data, MVTecDataset.imgs_train, feat_ext.HW_map(), cfg_draw)
 
     # extract features
     feat_test = {}

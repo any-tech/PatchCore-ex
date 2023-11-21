@@ -8,7 +8,9 @@ from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
 from utils.metrics import calc_imagewise_metrics, calc_pixelwise_metrics, calc_roc_best_score
 from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap
-from datasets.mvtec_dataset import MVTecDatasetInfer
+
+from datasets.mvtec_dataset import MVTecDatasetInfer, MVTecDataset
+
 from models.feat_extract import FeatExtract
 from models.patchcore import PatchCore
 
@@ -58,6 +60,7 @@ def arg_parser():
                         help='layer, which specifies a layer with spatial information as a reference when merging layer')
 
     parser.add_argument('--faiss_save_dir', type=str, default='output', help='Specify the directory to output faiss index')
+    parser.add_argument('--coreset_patch_save_dir', type=str, default='output', help='Specify where to save coreset patch')
 
     # patchification related
     parser.add_argument('-sp', '--size_patch', type=int, default=3,
@@ -133,7 +136,10 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
     D, D_max, I = patchcore.localization(feat_test)
+
     if args.verbose:
+        coreset_patch = patchcore.load_coreset_patch(type_data)
+
         draw_heatmap(
             type_data,
             cfg_draw,
@@ -145,7 +151,8 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
             None,
             I,
             None,
-            feat_ext.HW_map()
+            feat_ext.HW_map(),
+            coreset_patch=coreset_patch
         )
 
     img_thr = read_best_thr(args, type_data)
