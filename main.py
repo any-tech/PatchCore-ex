@@ -10,6 +10,7 @@ from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap
 from datasets.mvtec_dataset import MVTecDataset
 from models.feat_extract import FeatExtract
 from models.patchcore import PatchCore
+import torch
 
 
 def arg_parser():
@@ -166,6 +167,7 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
         draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, D_max,
                      MVTecDataset.imgs_test, MVTecDataset.files_test,
                      idx_coreset_total, I, MVTecDataset.imgs_train, feat_ext.HW_map())
+
 
     return [fpr_img, tpr_img, rocauc_img, fpr_pix, tpr_pix, rocauc_pix]
 

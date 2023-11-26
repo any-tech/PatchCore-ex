@@ -65,7 +65,7 @@ def draw_distance_graph(type_data, cfg_draw, D, rocauc_img):
     plt.close()
 
 
-def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_coreset, I, imgs_train, HW_map, coreset_patch=None):
+def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_coreset, I, imgs_train, HW_map, coreset_patch_img=None):
     for type_test in D.keys():
         for i in tqdm(range(len(D[type_test])), desc='[verbose mode] visualize localization (case:%s)' % type_test):
             file = files_test[type_test][i]
@@ -77,12 +77,12 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_co
 
             if imgs_train is not None:
                 img_patch = pickup_patch(idx_patch, imgs_train, HW_map, cfg_draw.size_receptive_field)
-            elif coreset_patch is not None:
+            elif coreset_patch_img is not None:
                 imgs_shape = imgs_test[type_test].shape[1:3]
                 idx_patch_one_img = I[type_test][i, :, 0]
                 img_patch = pickup_patch_from_coreset_patch(
                     idx_patch_one_img,
-                    coreset_patch,
+                    coreset_patch_img,
                     imgs_shape,
                     HW_map,
                     cfg_draw.size_receptive_field)
@@ -90,8 +90,6 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_co
             fig_width = 10 * max(1, cfg_draw.aspect_figure)
 
             fig_height = height = 18
-            # fig_height = height = 18 if cfg_draw.mode_visualize == 'eval' else 10
-
             plt.figure(figsize=(fig_width, fig_height), dpi=100, facecolor='white')
             plt.rcParams['font.size'] = 10
 
@@ -136,25 +134,6 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_co
                 plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
                 plt.imshow(img_patch, interpolation='none')
                 plt.title('patch images created with top1-NN')
-
-                # plt.subplot2grid((20, 2), (0, 0), rowspan=4, colspan=1)
-                # plt.imshow(img)
-                # plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
-                #
-                # plt.subplot2grid((20, 2), (0, 1), rowspan=4, colspan=1)
-                # plt.imshow(score_map)
-                # plt.colorbar()
-                # plt.title('max score : %.2f' % score_max)
-                #
-                # plt.subplot2grid((20, 2), (8, 0), rowspan=4, colspan=1)
-                # plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
-                #
-                # plt.subplot2grid((20, 2), (8, 1), rowspan=4, colspan=1)
-                # plt.imshow((img.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
-                #
-                # plt.subplot2grid((20, 1), (12, 0), rowspan=11, colspan=1)
-                # plt.imshow(img_patch, interpolation='none')
-                # plt.title('patch images created with top1-NN')
 
             score_tmp = np.max(score_map) / score_max * 100
             filename_out = os.path.join(cfg_draw.path_result, type_data,
@@ -218,15 +197,6 @@ def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field, coreset_patch=No
 
 
 def pickup_patch_from_coreset_patch(idx_patch, coreset_patch, imgs_shape, HW_map, size_receptive_field):
-    # get input shape
-    h = imgs_shape[0]
-    w = imgs_shape[1]
-
-    # calculate half size for split
-    h_half = int((size_receptive_field - 1) / 2)
-    w_half = int((size_receptive_field - 1) / 2)
-
-    # build blank image for output
     img_patch = np.zeros([
         (HW_map[0] * size_receptive_field),
         (HW_map[1] * size_receptive_field),

@@ -3,6 +3,7 @@ import numpy as np
 from argparse import ArgumentParser
 import csv
 import pandas as pd
+import torch
 
 from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
@@ -138,7 +139,7 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
     D, D_max, I = patchcore.localization(feat_test)
 
     if args.verbose:
-        coreset_patch = patchcore.load_coreset_patch(type_data)
+        coreset_patch_idx, coreset_patch_img = patchcore.load_coreset_patch(type_data)
 
         draw_heatmap(
             type_data,
@@ -148,11 +149,11 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
             D_max,
             MVTecDatasetInfer.imgs_test,
             MVTecDatasetInfer.files_test,
-            None,
+            coreset_patch_idx,
             I,
             None,
             feat_ext.HW_map(),
-            coreset_patch=coreset_patch
+            coreset_patch_img=coreset_patch_img
         )
 
     img_thr = read_best_thr(args, type_data)

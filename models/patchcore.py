@@ -183,14 +183,18 @@ class PatchCore:
         return img_piece_array
 
     def save_coreset_patch(self, idx_coreset, type_data, image_train, HW_map, cfg_draw):
-        idx_patch = np.arange(0, idx_coreset.shape[0])
-        img_patch = self.pickup_patch(idx_patch, image_train, HW_map, cfg_draw.size_receptive_field)
+        img_patch = self.pickup_patch(idx_coreset, image_train, HW_map, cfg_draw.size_receptive_field)
+        coreset_img_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_img.npy')
+        np.save(coreset_img_file_path, img_patch)
 
-        file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch.npy')
-        np.save(file_path, img_patch)
+        coreset_idx_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_idx.npy')
+        np.save(coreset_idx_file_path, idx_coreset)
 
     def load_coreset_patch(self, type_data):
-            file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch.npy')
-            coreset_patch = np.load(file_path)
+        coreset_img_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_img.npy')
+        coreset_patch_img = np.load(coreset_img_file_path)
 
-            return coreset_patch
+        coreset_idx_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_idx.npy')
+        coreset_patch_idx = np.load(coreset_idx_file_path)
+
+        return coreset_patch_idx, coreset_patch_img
