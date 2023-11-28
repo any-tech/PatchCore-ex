@@ -36,6 +36,8 @@ def arg_parser():
 
     parser.add_argument('--thr_save_dir', type=str, default='output', help='Specify the directory to output img thresholds')
 
+    parser.add_argument('--score_max', type=float, help='Value for normalization to use when visualizing')
+
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
                         help='batch-size for feature extraction by ImageNet model')
@@ -146,7 +148,7 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
             cfg_draw,
             D,
             MVTecDatasetInfer.gts_test,
-            D_max,
+            args.score_max if args.score_max else D_max,
             MVTecDatasetInfer.imgs_test,
             MVTecDatasetInfer.files_test,
             coreset_patch_idx,
@@ -164,6 +166,13 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
 
 
 def main(args):
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
+
     ConfigData(args)  # static define for speed-up
     cfg_feat = ConfigFeat(args)
     cfg_patchcore = ConfigPatchCore(args)
