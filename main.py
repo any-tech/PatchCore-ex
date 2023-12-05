@@ -178,10 +178,6 @@ def main(args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-
     ConfigData(args)  # static define for speed-up
     cfg_feat = ConfigFeat(args)
     cfg_patchcore = ConfigPatchCore(args)

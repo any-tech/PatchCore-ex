@@ -7,6 +7,18 @@ import torchvision
 from torchinfo import summary
 
 
+def print_weight_device(backbone):
+    for name, module in backbone.named_modules():
+        if hasattr(module, 'weight') and getattr(module, 'weight') is not None:
+            weight_device = module.weight.device
+            weight_shape = module.weight.shape
+            print(f"{name}.weight - Device: {weight_device}, Shape: {weight_shape}")
+
+        if hasattr(module, 'bias') and getattr(module, 'bias') is not None:
+            bias_device = module.bias.device
+            print(f"{name}.bias - Device: {bias_device}")
+
+
 class FeatExtract:
     def __init__(self, cfg_feat):
         self.device = cfg_feat.device
@@ -25,9 +37,11 @@ class FeatExtract:
 
         code = 'self.backbone = %s(weights=%s)' % (cfg_feat.backbone, cfg_feat.weight)
         exec(code)
-        self.backbone.eval()
-        self.backbone.to(self.device)
         summary(self.backbone, input_size=(1, 3, *self.shape_input))
+        self.backbone.eval()
+
+        # Executing summary will force the backbone device to be changed to cuda, so do to(device) after summary
+        self.backbone.to(self.device)
 
         self.feat = []
         for layer_map in self.layer_map:

@@ -23,9 +23,12 @@ class PatchCore:
         self.HW_map = HW_map
 
         # prep knn index
-        self.index_feat = faiss.GpuIndexFlatL2(faiss.StandardGpuResources(),
-                                               self.dim_coreset_feat,
-                                               faiss.GpuIndexFlatConfig())
+        if self.device.type != 'cuda':
+            self.index_feat = faiss.IndexFlatL2(self.dim_coreset_feat)
+        else:
+            self.index_feat = faiss.GpuIndexFlatL2(faiss.StandardGpuResources(),
+                                                   self.dim_coreset_feat,
+                                                   faiss.GpuIndexFlatConfig())
 
         # prep mapper
         self.mapper = torch.nn.Linear(self.dim_coreset_feat, self.dim_sampling,
