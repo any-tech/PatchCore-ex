@@ -102,7 +102,14 @@ class PatchCore:
         faiss_idx_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
         self.index_feat = faiss.read_index(faiss_idx_path)
 
-    def localization(self, feat_test):
+    def load_neighbor(self, type_data):
+        faiss_idx_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
+        self.index_feat = faiss.read_index(faiss_idx_path)
+
+    def load_neighbor_from_file(self, file_path):
+        self.index_feat = faiss.read_index(file_path)
+
+    def localization(self, feat_test, show_progress=True):
         D = {}
         D_max = -9999
         I = {}
@@ -116,7 +123,7 @@ class PatchCore:
             _feat_test = _feat_test.reshape(-1, (self.HW_map[0] * self.HW_map[1]), self.dim_coreset_feat)
             _feat_test = _feat_test.numpy()
             num_data = len(_feat_test)
-            for i in tqdm(range(num_data), desc='localization (case:%s)' % type_test):
+            for i in tqdm(range(num_data), desc='localization (case:%s)' % type_test, disable=not show_progress):
                 # measure distance pixelwise
                 score_map, I_tmp = self.measure_dist_pixelwise(feat_test=_feat_test[i])
                 # adjust score of outer-pixel (provisional heuristic algorithm)

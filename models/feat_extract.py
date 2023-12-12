@@ -84,12 +84,11 @@ class FeatExtract:
         return x
 
     # return : is_train=True->torch.Tensor, is_train=False->dict
-    def extract(self, imgs, case='train (case:good)', batch_size_patchfy=50):
+    def extract(self, imgs, case='train (case:good)', batch_size_patchfy=50, show_progress=True):
         # feature extract for train and aggregate split-image for explain
         x_batch = []
         self.feat = []
-        for i_img in tqdm(range(len(imgs)),
-                          desc='extract feature for %s' % case):
+        for i_img in tqdm(range(len(imgs)), desc='extract feature for %s' % case, disable=not show_progress):
             img = imgs[i_img]
             x = self.normalize(img)
             x_batch.append(x)
@@ -112,7 +111,7 @@ class FeatExtract:
 
         num_patchfy_process = (len(feat) * 3) + 1
         num_iter = np.ceil(len(imgs) / batch_size_patchfy)
-        pbar = tqdm(total=int(num_patchfy_process * num_iter), desc='patchfy feature')
+        pbar = tqdm(total=int(num_patchfy_process * num_iter), desc='patchfy feature', disable=not show_progress)
         for i_batch in range(0, len(imgs), batch_size_patchfy):
             feat_tmp = []
             for feat_layer in feat:
