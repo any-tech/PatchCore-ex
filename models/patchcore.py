@@ -102,10 +102,6 @@ class PatchCore:
         faiss_idx_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
         self.index_feat = faiss.read_index(faiss_idx_path)
 
-    def load_neighbor(self, type_data):
-        faiss_idx_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
-        self.index_feat = faiss.read_index(faiss_idx_path)
-
     def load_neighbor_from_file(self, file_path):
         self.index_feat = faiss.read_index(file_path)
 
@@ -208,3 +204,8 @@ class PatchCore:
         coreset_patch_idx = np.load(coreset_idx_file_path)
 
         return coreset_patch_idx, coreset_patch_img
+
+    def load_coreset_patch_from_file(self, file_path):
+        coreset_patch_img = np.load(file_path)
+        return coreset_patch_img
+
