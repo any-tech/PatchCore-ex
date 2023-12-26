@@ -1,21 +1,15 @@
 import os
 import numpy as np
 from argparse import ArgumentParser
-import csv
-import pandas as pd
 import torch
 import cv2
-import time
-import concurrent.futures
-from concurrent.futures import wait, FIRST_COMPLETED
-
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
+from PIL import Image
+from tqdm import tqdm
 
 from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
 from utils.metrics import calc_imagewise_metrics, calc_pixelwise_metrics, calc_roc_best_score
-from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap, pickup_patch_from_coreset_patch
+from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap, pickup_patch_from_coreset_patch, draw_heatmap
 
 from datasets.mvtec_dataset import MVTecDatasetInfer, MVTecDataset
 
@@ -45,7 +39,9 @@ def arg_parser():
 
     parser.add_argument('--score_max', type=float, help='Value for normalization to use when visualizing')
 
-    parser.add_argument('--frame_skip', type=int, default=8, help='Set the number of frames to skip when visualizing video')
+    parser.add_argument('--frame_skip', type=int, default=4, help='Set the number of frames to skip when visualizing video')
+
+    parser.add_argument('--display_video', action='store_true', help='If you want to display video during inference, set')
 
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
@@ -110,32 +106,20 @@ def arg_parser():
     return args
 
 
-def apply_colormap_on_scoremap(scoremap, colormap=cv2.COLORMAP_JET):
-    normalized_scoremap = cv2.normalize(scoremap, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    colored_scoremap = cv2.applyColorMap(normalized_scoremap, colormap)
-    return colored_scoremap
-
-
-def blend_images(image, colored_scoremap, alpha=0.5):
-    blended = cv2.addWeighted(image, alpha, colored_scoremap, 1 - alpha, 0)
-    return blended
-
-
 def apply_patchcore(args, feat_ext, patchcore, frame, cfg_draw):
-    height, width, channel = frame.shape
+    img = cv2.resize(frame, (ConfigData.SHAPE_MIDDLE[1], ConfigData.SHAPE_MIDDLE[0]), interpolation=cv2.INTER_AREA)
 
-    resized_frame = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_LINEAR)
+    img = img[
+          ConfigData.pixel_cut[0]:(ConfigData.SHAPE_INPUT[0] + ConfigData.pixel_cut[0]),
+          ConfigData.pixel_cut[1]:(ConfigData.SHAPE_INPUT[1] + ConfigData.pixel_cut[1])
+    ]
+
     type_name = 'infer_video'
     feat_test = {}
-    feat_test[type_name] = feat_ext.extract(resized_frame[None], case='', show_progress=False)
+    feat_test[type_name] = feat_ext.extract(img[None], case='', show_progress=False)
     D, D_max, I = patchcore.localization(feat_test, show_progress=False)
 
-    score_map = D[type_name][0]
-    resized_scoremap = cv2.resize(score_map, (width, height), interpolation=cv2.INTER_LINEAR)
-    colored_scoremap = apply_colormap_on_scoremap(resized_scoremap)
-    blended_image = blend_images(frame, colored_scoremap, alpha=0.5)
-
-    return resized_frame, blended_image, score_map, D, D_max, I
+    return img, D, D_max, I
 
 
 def inference(args, feat_ext, patchcore, cfg_draw):
@@ -145,158 +129,25 @@ def inference(args, feat_ext, patchcore, cfg_draw):
     cap = cv2.VideoCapture(args.path_input_video)
     fps = cap.get(cv2.CAP_PROP_FPS)
 
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    frame_count = 0
-
-    ret, frame = cap.read()
-    # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    fig_width = 10 * max(1, cfg_draw.aspect_figure)
-    fig_height = height = 18
-    fig = plt.figure(figsize=(fig_width, fig_height), dpi=100, facecolor='white')
-    plt.rcParams['font.size'] = 10
-
-    # original image
-    ax_image = plt.subplot2grid((7, 2), (0, 0), rowspan=1, colspan=1)
-    im_image = ax_image.imshow(frame)
-
-    # score map
-    ax_score = plt.subplot2grid((7, 2), (0, 1), rowspan=1, colspan=1)
-    resized_frame, processed_frame, score_map, distance, distance_max, index = apply_patchcore(
-        args,
-        feat_ext,
-        patchcore,
-        frame,
-        cfg_draw)
-    im_score = ax_score.imshow(score_map)
-    # plt.colorbar(im_score, ax_score)
-
-    # overlay heatmap
-    ax_heatmap = plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
-    im_heatmap = ax_heatmap.imshow(processed_frame)
-
-    # image by normalize by score max
-    ax_score_max = plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
-    score_max = args.score_max if args.score_max else distance_max
-    im_score_max = ax_score_max.imshow((resized_frame.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
-
-    # image patch
-    ax_patch = plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
-    coreset_patch_img = patchcore.load_coreset_patch_from_file(args.path_coreset_patch_img)
-
-    idx_patch_one_img = index['infer_video'][0, :, 0]
-    imgs_shape = resized_frame.shape
-    HW_map = feat_ext.HW_map()
-    img_patch = pickup_patch_from_coreset_patch(
-        idx_patch_one_img,
-        coreset_patch_img,
-        imgs_shape,
-        HW_map,
-        cfg_draw.size_receptive_field)
-
-    im_patch = ax_patch.imshow(img_patch, interpolation='none')
-
-    def update(frame):
-        nonlocal args
-        nonlocal frame_count
-        nonlocal im_image, ax_image
-        nonlocal im_score, ax_score
-        nonlocal im_score_max, ax_score_max
-        nonlocal im_heatmap, ax_heatmap
-        nonlocal im_patch, ax_patch
-        nonlocal coreset_patch_img
-
-        while frame_count < args.frame_skip:
-            if not cap.grab():
-                return im_image, im_score, im_score_max, im_heatmap, im_patch
-            frame_count += 1
-
-        if not cap.grab():
-            return im_image, im_score, im_score_max, im_heatmap, im_patch
-
-        ret, frame = cap.retrieve()
-        frame_count = 0
-
-        if ret:
-            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-            # original image
-            im_image.set_data(frame)
-
-            # score map
-            resized_frame, processed_frame, score_map, distance, distance_max, index = apply_patchcore(
-                args,
-                feat_ext,
-                patchcore,
-                frame,
-                cfg_draw)
-
-            im_score.set_data(score_map)
-            # plt.colorbar(im_score, ax_score)
-
-            # overlay heatmap
-            im_heatmap.set_data(processed_frame)
-
-            # image by normalize by score max
-            im_score_max.set_data((resized_frame.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
-
-            # image patch
-            idx_patch_one_img = index['infer_video'][0, :, 0]
-            imgs_shape = resized_frame.shape
-            HW_map = feat_ext.HW_map()
-            img_patch = pickup_patch_from_coreset_patch(
-                idx_patch_one_img,
-                coreset_patch_img,
-                imgs_shape,
-                HW_map,
-                cfg_draw.size_receptive_field)
-
-            im_patch.set_data(img_patch)
-
-        return im_image, im_score, im_score_max, im_heatmap, im_patch
-
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frames = total_frames // args.frame_skip
-    ani = animation.FuncAnimation(fig, update, frames=frames, blit=True)
 
-    # 動画ファイルとして保存
-    output_video_path = 'output.mp4'
-    ani.save(output_video_path, writer='ffmpeg')
-    cap.release()
+    pbar = tqdm(total=total_frames, desc='Processing Video')
 
-
-def inference__(args, feat_ext, patchcore, cfg_draw):
-    patchcore.reset_neighbor()
-    patchcore.load_neighbor_from_file(args.faiss_index_path)
-
-    cap = cv2.VideoCapture(args.path_input_video)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frame_width = 1000
+    frame_height = 1800
 
     output_filename = 'output.mp4'
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
 
-    # out = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
+    coreset_patch_img = patchcore.load_coreset_patch_from_file(args.path_coreset_patch_img)
 
     frame_count = 0
-
-    fig_width = 10 * max(1, cfg_draw.aspect_figure)
-
-    fig_height = height = 18
-    plt.ion()
-    fig = plt.figure(figsize=(fig_width, fig_height), dpi=100, facecolor='white')
-    plt.rcParams['font.size'] = 10
-    ax = plt.subplot2grid((7, 2), (0, 0), rowspan=1, colspan=1)
-
     while cap.isOpened():
-        start_time = time.time()
-
         ret = cap.grab()
         frame_count += 1
+
+        pbar.update(1)
 
         if not ret:
             break
@@ -308,31 +159,49 @@ def inference__(args, feat_ext, patchcore, cfg_draw):
         if not ret:
             break
 
-        processed_frame = apply_patchcore(args, feat_ext, patchcore, frame, cfg_draw)
+        resized_frame, distance, distance_max, index = apply_patchcore(
+            args,
+            feat_ext,
+            patchcore,
+            frame,
+            cfg_draw)
 
-        ax.imshow(processed_frame)
-        plt.draw()
-        plt.pause(0.1)
-        ax.clear()
-        # cv2.imshow('Processed Frame', processed_frame)
+        type_data = 'infer_video'
+        imgs_test = {type_data: resized_frame[None]}
+        y = {}
+        files_test = {type_data: [args.path_input_video]}
 
-        # out.write(processed_frame)
+        img_figure_dict = draw_heatmap(
+            type_data,
+            cfg_draw,
+            distance,
+            y,
+            distance_max,
+            imgs_test,
+            files_test,
+            coreset_patch_img,
+            index,
+            None,
+            feat_ext.HW_map(),
+            coreset_patch_img=coreset_patch_img,
+            is_save_file=False,
+            is_tqdm=False
+        )
+
+        img_figure = img_figure_dict['infer_video'][:, :, ::-1]
+
+        if args.display_video:
+            cv2.imshow('Processed Frame', img_figure)
+
+        out.write(img_figure)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-        # time_to_wait = max(1.0 / fps - (time.time() - start_time), 0)
-        time_to_wait = 0.005
-        time.sleep(time_to_wait)
-
-    # 動画ファイルとして保存
-    output_video_path = 'output.mp4'
-    writer = animation.FFMpegWriter(fps=20, codec='libx264', extra_args=['-pix_fmt', 'yuv420p'])
-
+    pbar.close()
     cap.release()
-    # out.release()
+    out.release()
     cv2.destroyAllWindows()
-
 
 
 def main(args):

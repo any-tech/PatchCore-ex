@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from PIL import Image
 
 
 # https://github.com/gsurma/cnn_explainer/blob/main/utils.py
@@ -65,9 +66,20 @@ def draw_distance_graph(type_data, cfg_draw, D, rocauc_img):
     plt.close()
 
 
-def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_coreset, I, imgs_train, HW_map, coreset_patch_img=None):
+def conditional_tqdm(iterator, verbose=False, desc=''):
+    if verbose:
+        return tqdm(iterator, desc=desc)
+    else:
+        return iterator
+
+
+def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_coreset, I, imgs_train, HW_map,
+                 coreset_patch_img=None, is_save_file=True, is_tqdm=True):
+
+    img_figure_dict = {}
     for type_test in D.keys():
-        for i in tqdm(range(len(D[type_test])), desc='[verbose mode] visualize localization (case:%s)' % type_test):
+        img_figure_list = []
+        for i in conditional_tqdm(range(len(D[type_test])), verbose=is_tqdm, desc='[verbose mode] visualize localization (case:%s)' % type_test):
             file = files_test[type_test][i]
             img = imgs_test[type_test][i]
             score_map = D[type_test][i]
@@ -90,7 +102,8 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_co
             fig_width = 10 * max(1, cfg_draw.aspect_figure)
 
             fig_height = height = 18
-            plt.figure(figsize=(fig_width, fig_height), dpi=100, facecolor='white')
+            dpi = 100
+            plt.figure(figsize=(fig_width, fig_height), dpi=dpi, facecolor='white')
             plt.rcParams['font.size'] = 10
 
             if cfg_draw.mode_visualize == 'eval':
@@ -143,9 +156,22 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_co
                                           (cfg_draw.percentage_coreset * 1000),
                                           cfg_draw.k, round(score_tmp))))
 
-            plt.gcf().savefig(filename_out)
+            img_figure = None
+            if is_save_file:
+                plt.gcf().savefig(filename_out)
+            else:
+                plt.gcf().canvas.draw()
+                img_figure = np.fromstring(plt.gcf().canvas.tostring_rgb(), dtype='uint8')
+                img_figure = img_figure.reshape(fig_height * dpi, -1, 3)
+                img_figure_list.append(img_figure)
+
             plt.clf()
             plt.close()
+
+        img_figure_array = np.concatenate(img_figure_list) if 0 < len(img_figure_list) else None
+        img_figure_dict[type_test] = img_figure_array
+
+    return img_figure_dict
 
 
 def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field, coreset_patch=None):
