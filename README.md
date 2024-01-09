@@ -40,6 +40,18 @@ After downloading, place the data as follows:
 ├── main.py
 └── mvtec_anomaly_detection
     ├── bottle
+    │   ├── ground_truth  # pixel annotation of test data other than good
+    │   │   ├── broken_large
+    │   │   ├── broken_small
+    │   │   └── contamination
+    │   ├── test  # other than good is anomaly data
+    │   │   ├── broken_large
+    │   │   ├── broken_small
+    │   │   ├── contamination
+    │   │   └── good
+    │   └── train  # good only
+    │       └── good
+    ├── cable
     ├── cable
     ├── capsule
     ├── carpet
@@ -58,6 +70,25 @@ After downloading, place the data as follows:
 
 <br/>
 
+When using custom dataset, place the data as follows:
+```
+./
+├── main.py
+└── custom_data
+    └── theme
+        ├── ground_truth  # pixel annotation of test data other than good
+        │   ├── anomaly_type_a
+        │   └── anomaly_type_b
+        ├── test  # other than good is anomaly data
+        │   ├── anomaly_type_a
+        │   ├── anomaly_type_b
+        │   └── good
+        └── train  # good only
+            └── good
+```
+
+<br/>
+
 ## Usage
 
 To test **PatchCore** on `MVTec AD` dataset:
@@ -66,6 +97,13 @@ python main.py
 ```
 
 After running the code above, you can see the ROCAUC results in `result/roc_curve.png`
+
+<br/>
+
+To test **PatchCore** on custom dataset:
+```
+python main.py --path_parent ./custom_data
+```
 
 <br/>
 
