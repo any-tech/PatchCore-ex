@@ -63,6 +63,8 @@ class ConfigFeat:
         # layer specification
         self.layer_map = args.layer_map
 
+        self.layer_weights = args.layer_weights
+
         # patch pixel of feature map for increasing receptive field size
         self.size_patch = args.size_patch
 

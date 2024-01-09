@@ -25,6 +25,7 @@ class FeatExtract:
         self.batch_size = cfg_feat.batch_size
         self.shape_input = cfg_feat.SHAPE_INPUT
         self.layer_map = cfg_feat.layer_map
+        self.layer_weights = cfg_feat.layer_weights
         self.size_patch = cfg_feat.size_patch
         self.dim_each_feat = cfg_feat.dim_each_feat
         self.dim_merge_feat = cfg_feat.dim_merge_feat
@@ -188,12 +189,13 @@ class FeatExtract:
 
             # adaptive average pooling for each feature vector
             for i in range(len(feat)):
-                _feat = feat[i]
+                _feat = feat[i] * self.layer_weights[i]
+
                 # (BHW, C, PH, PW) -> (BHW, 1, CPHPW)
                 _feat = _feat.reshape(len(_feat), 1, -1)
+
                 # (BHW, 1, CPHPW) -> (BHW, D_e)
-                _feat = F.adaptive_avg_pool1d(_feat,
-                                              self.dim_each_feat).squeeze(1)
+                _feat = F.adaptive_avg_pool1d(_feat, self.dim_each_feat).squeeze(1)
                 feat[i] = _feat
                 pbar.update(1)
 

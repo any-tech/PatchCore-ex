@@ -56,6 +56,10 @@ def arg_parser():
                         default=['layer2[-1]', 'layer3[-1]'],
                         help='specify layers to extract feature map')
 
+    parser.add_argument('--layer_weights', nargs='+', type=float,
+                        default=[1.0, 1.0],
+                        help='specify layers weights for merge of feature map')
+
     parser.add_argument('--merge_dst_layer', type=str, default='layer2[-1]',
                         help='layer, which specifies a layer with spatial information as a reference when merging layer')
 
