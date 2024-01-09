@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from PIL import Image
 
 
 # https://github.com/gsurma/cnn_explainer/blob/main/utils.py
@@ -44,8 +45,7 @@ def draw_distance_graph(type_data, cfg_draw, D, rocauc_img):
     types_test = np.array([k for k in D_list.keys() if k != 'good'])
     for type_test in types_test:
         plt.subplot(2, 1, 1)
-        plt.scatter((np.arange(len(D_list[type_test])) + N_test), D_list[type_test],
-                    alpha=0.5, label=type_test)
+        plt.scatter((np.arange(len(D_list[type_test])) + N_test), D_list[type_test], alpha=0.5, label=type_test)
         plt.subplot(2, 1, 2)
         plt.hist(D_list[type_test], alpha=0.5, label=type_test, bins=10)
         N_test += len(D_list[type_test])
@@ -66,55 +66,85 @@ def draw_distance_graph(type_data, cfg_draw, D, rocauc_img):
     plt.close()
 
 
-def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test,
-                 idx_coreset, I, imgs_train, HW_map):
+def conditional_tqdm(iterator, verbose=False, desc=''):
+    if verbose:
+        return tqdm(iterator, desc=desc)
+    else:
+        return iterator
+
+
+def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_coreset, I, imgs_train, HW_map,
+                 coreset_patch_img=None, is_save_file=True, is_tqdm=True):
+
+    img_figure_dict = {}
     for type_test in D.keys():
-        for i in tqdm(range(len(D[type_test])),
-                      desc='[verbose mode] visualize localization (case:%s)' % type_test):
+        img_figure_list = []
+        for i in conditional_tqdm(range(len(D[type_test])), verbose=is_tqdm, desc='[verbose mode] visualize localization (case:%s)' % type_test):
             file = files_test[type_test][i]
             img = imgs_test[type_test][i]
             score_map = D[type_test][i]
-            idx_patch = idx_coreset[I[type_test][i][:, 0]]
+            idx_patch = idx_coreset[I[type_test][i][:, 0]] if idx_coreset is not None else None
             score_max = D_max
-            gt = y[type_test][i]
-            img_patch = pickup_patch(idx_patch, imgs_train, HW_map,
-                                     cfg_draw.size_receptive_field)
+            gt = y[type_test][i] if y != {} else None
 
-            plt.figure(figsize=(10 * max(1, cfg_draw.aspect_figure), 18),
-                       dpi=100, facecolor='white')
+            if imgs_train is not None:
+                img_patch = pickup_patch(idx_patch, imgs_train, HW_map, cfg_draw.size_receptive_field)
+            elif coreset_patch_img is not None:
+                imgs_shape = imgs_test[type_test].shape[1:3]
+                idx_patch_one_img = I[type_test][i, :, 0]
+                img_patch = pickup_patch_from_coreset_patch(
+                    idx_patch_one_img,
+                    coreset_patch_img,
+                    imgs_shape,
+                    HW_map,
+                    cfg_draw.size_receptive_field)
+
+            fig_width = 10 * max(1, cfg_draw.aspect_figure)
+
+            fig_height = height = 18
+            dpi = 100
+            plt.figure(figsize=(fig_width, fig_height), dpi=dpi, facecolor='white')
             plt.rcParams['font.size'] = 10
 
-            if (cfg_draw.mode_visualize == 'eval'):
+            if cfg_draw.mode_visualize == 'eval':
                 plt.subplot2grid((7, 3), (0, 0), rowspan=1, colspan=1)
                 plt.imshow(img)
                 plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
+
                 plt.subplot2grid((7, 3), (0, 1), rowspan=1, colspan=1)
                 plt.imshow(gt)
+
                 plt.subplot2grid((7, 3), (0, 2), rowspan=1, colspan=1)
                 plt.imshow(score_map)
                 plt.colorbar()
                 plt.title('max score : %.2f' % score_max)
+
                 plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
                 plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
+
                 plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
-                plt.imshow((img.astype(np.float32) *
-                            (score_map / score_max)[..., None]).astype(np.uint8))
+                plt.imshow((img.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
 
                 plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
                 plt.imshow(img_patch, interpolation='none')
                 plt.title('patch images created with top1-NN')
-            elif (cfg_draw.mode_visualize == 'infer'):
-                plt.subplot2grid((5, 2), (0, 0), rowspan=1, colspan=1)
+            elif cfg_draw.mode_visualize == 'infer':
+                plt.subplot2grid((7, 2), (0, 0), rowspan=1, colspan=1)
                 plt.imshow(img)
                 plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
-                plt.subplot2grid((5, 2), (0, 1), rowspan=1, colspan=1)
+
+                plt.subplot2grid((7, 2), (0, 1), rowspan=1, colspan=1)
                 plt.imshow(score_map)
                 plt.colorbar()
                 plt.title('max score : %.2f' % score_max)
-                plt.subplot2grid((5, 1), (1, 0), rowspan=2, colspan=1)
+
+                plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
                 plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
 
-                plt.subplot2grid((5, 1), (3, 0), rowspan=2, colspan=1)
+                plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
+                plt.imshow((img.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
+
+                plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
                 plt.imshow(img_patch, interpolation='none')
                 plt.title('patch images created with top1-NN')
 
@@ -126,12 +156,25 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test,
                                           (cfg_draw.percentage_coreset * 1000),
                                           cfg_draw.k, round(score_tmp))))
 
-            plt.gcf().savefig(filename_out)
+            img_figure = None
+            if is_save_file:
+                plt.gcf().savefig(filename_out)
+            else:
+                plt.gcf().canvas.draw()
+                img_figure = np.fromstring(plt.gcf().canvas.tostring_rgb(), dtype='uint8')
+                img_figure = img_figure.reshape(fig_height * dpi, -1, 3)
+                img_figure_list.append(img_figure)
+
             plt.clf()
             plt.close()
 
+        img_figure_array = np.concatenate(img_figure_list) if 0 < len(img_figure_list) else None
+        img_figure_dict[type_test] = img_figure_array
 
-def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field):
+    return img_figure_dict
+
+
+def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field, coreset_patch=None):
     # get input shape
     h = imgs.shape[-3]
     w = imgs.shape[-2]
@@ -165,14 +208,38 @@ def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field):
         y = y_pitch[i_H]
         x = x_pitch[i_W]
         img_piece = img[(y - h_half):(y + h_half + 1),
-                        (x - w_half):(x + w_half + 1)]
+                    (x - w_half):(x + w_half + 1)]
 
         y = i_y * size_receptive_field
         x = i_x * size_receptive_field
         img_patch[y:(y + size_receptive_field),
-                  x:(x + size_receptive_field)] = img_piece
+        x:(x + size_receptive_field)] = img_piece
         i_x += 1
         if (i_x >= HW_map[1]):
+            i_x = 0
+            i_y += 1
+
+    return img_patch
+
+
+def pickup_patch_from_coreset_patch(idx_patch, coreset_patch, imgs_shape, HW_map, size_receptive_field):
+    img_patch = np.zeros([
+        (HW_map[0] * size_receptive_field),
+        (HW_map[1] * size_receptive_field),
+        3], dtype=np.uint8)
+
+    i_y = 0
+    i_x = 0
+
+    # loop of patch feature index
+    for i_patch in idx_patch:
+        img_piece = coreset_patch[i_patch]
+
+        y = i_y * size_receptive_field
+        x = i_x * size_receptive_field
+        img_patch[y:(y + size_receptive_field), x:(x + size_receptive_field)] = img_piece
+        i_x += 1
+        if i_x >= HW_map[1]:
             i_x = 0
             i_y += 1
 

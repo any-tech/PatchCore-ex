@@ -46,6 +46,10 @@ class ConfigFeat:
         else:
             self.device = torch.device('cuda:0')
 
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(args.seed)
+                torch.cuda.manual_seed_all(args.seed)
+
         # batch-size for feature extraction by ImageNet model
         self.batch_size = args.batch_size
 
@@ -82,6 +86,10 @@ class ConfigPatchCore:
         else:
             self.device = torch.device('cuda:0')
 
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(args.seed)
+                torch.cuda.manual_seed_all(args.seed)
+
         # dimension after layer feature merging (at 2nd adaptive average pooling)
         self.dim_coreset_feat = args.dim_merge_feat
 
@@ -104,6 +112,10 @@ class ConfigPatchCore:
 
         # consideration for the outer edge
         self.pixel_outer_decay = args.pixel_outer_decay
+
+        self.faiss_save_dir = args.faiss_save_dir
+
+        self.coreset_patch_save_dir = args.coreset_patch_save_dir
 
 
 class ConfigDraw:
