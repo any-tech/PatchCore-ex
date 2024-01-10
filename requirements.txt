@@ -1,6 +1,7 @@
 faiss-gpu
 matplotlib
 numpy
+numba
 opencv-python
 scikit-learn
 scipy

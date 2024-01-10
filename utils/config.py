@@ -77,7 +77,7 @@ class ConfigFeat:
         self.MEAN = MEAN.to(self.device)
         self.STD = STD.to(self.device)
 
-        self.merge_dst_layer = args.merge_dst_layer
+        self.layer_merge_ref = args.layer_merge_ref
 
 
 class ConfigPatchCore:

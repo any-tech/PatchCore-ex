@@ -55,6 +55,7 @@ def arg_parser():
     parser.add_argument('-lm', '--layer_map', nargs='+', type=str,
                         default=['layer2[-1]', 'layer3[-1]'],
                         help='specify layers to extract feature map')
+# <<<<<<< add_inference_code
 
     parser.add_argument('--layer_weights', nargs='+', type=float,
                         default=[1.0, 1.0],
@@ -62,6 +63,10 @@ def arg_parser():
 
     parser.add_argument('--merge_dst_layer', type=str, default='layer2[-1]',
                         help='layer, which specifies a layer with spatial information as a reference when merging layer')
+# =======
+    parser.add_argument('-lmr', '--layer_merge_ref', type=str, default='layer2[-1]',
+                        help='specify the layer to use as a reference for spatial size when merging feature maps')
+# >>>>>>> main
 
     parser.add_argument('--faiss_save_dir', type=str, default='output', help='Specify the directory to output faiss index')
     parser.add_argument('--coreset_patch_save_dir', type=str, default='output', help='Specify where to save coreset patch')
