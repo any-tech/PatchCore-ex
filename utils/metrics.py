@@ -24,14 +24,14 @@ def calc_imagewise_metrics(D, type_normal='good'):
     y_flatten_list = np.array(y_list).reshape(-1)
     pbar.update(1)
 
-    fpr, tpr, _ = roc_curve(y_flatten_list, D_flatten_list)
+    fpr, tpr, thresholds = roc_curve(y_flatten_list, D_flatten_list)
     pbar.update(1)
 
     rocauc = roc_auc_score(y_flatten_list, D_flatten_list)
     pbar.update(1)
     pbar.close()
 
-    return fpr, tpr, rocauc
+    return fpr, tpr, thresholds, rocauc
 
 
 def calc_pixelwise_metrics(D, y):
@@ -97,3 +97,11 @@ def roc_auc_score(y_true, y_score):
     area = direction * np.trapz(tps, fps) / (tps[-1] * fps[-1])
 
     return area
+
+
+def calc_roc_best_score(fpr, tpr, thresholds):
+    gmeans = np.sqrt(tpr * (1 - fpr))
+    ix = np.argmax(gmeans)
+    roc_threshold = thresholds[ix]
+
+    return roc_threshold, ix

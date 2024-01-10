@@ -7,12 +7,25 @@ import torchvision
 from torchinfo import summary
 
 
+def print_weight_device(backbone):
+    for name, module in backbone.named_modules():
+        if hasattr(module, 'weight') and getattr(module, 'weight') is not None:
+            weight_device = module.weight.device
+            weight_shape = module.weight.shape
+            print(f"{name}.weight - Device: {weight_device}, Shape: {weight_shape}")
+
+        if hasattr(module, 'bias') and getattr(module, 'bias') is not None:
+            bias_device = module.bias.device
+            print(f"{name}.bias - Device: {bias_device}")
+
+
 class FeatExtract:
     def __init__(self, cfg_feat):
         self.device = cfg_feat.device
         self.batch_size = cfg_feat.batch_size
         self.shape_input = cfg_feat.SHAPE_INPUT
         self.layer_map = cfg_feat.layer_map
+        self.layer_weights = cfg_feat.layer_weights
         self.size_patch = cfg_feat.size_patch
         self.dim_each_feat = cfg_feat.dim_each_feat
         self.dim_merge_feat = cfg_feat.dim_merge_feat
@@ -25,9 +38,11 @@ class FeatExtract:
 
         code = 'self.backbone = %s(weights=%s)' % (cfg_feat.backbone, cfg_feat.weight)
         exec(code)
-        self.backbone.eval()
-        self.backbone.to(self.device)
         summary(self.backbone, input_size=(1, 3, *self.shape_input))
+        self.backbone.eval()
+
+        # Executing summary will force the backbone device to be changed to cuda, so do to(device) after summary
+        self.backbone.to(self.device)
 
         self.feat = []
         for layer_map in self.layer_map:
@@ -70,12 +85,11 @@ class FeatExtract:
         return x
 
     # return : is_train=True->torch.Tensor, is_train=False->dict
-    def extract(self, imgs, case='train (case:good)', batch_size_patchfy=50):
+    def extract(self, imgs, case='train (case:good)', batch_size_patchfy=50, show_progress=True):
         # feature extract for train and aggregate split-image for explain
         x_batch = []
         self.feat = []
-        for i_img in tqdm(range(len(imgs)),
-                          desc='extract feature for %s' % case):
+        for i_img in tqdm(range(len(imgs)), desc='extract feature for %s' % case, disable=not show_progress):
             img = imgs[i_img]
             x = self.normalize(img)
             x_batch.append(x)
@@ -98,7 +112,7 @@ class FeatExtract:
 
         num_patchfy_process = (len(feat) * 3) + 1
         num_iter = np.ceil(len(imgs) / batch_size_patchfy)
-        pbar = tqdm(total=int(num_patchfy_process * num_iter), desc='patchfy feature')
+        pbar = tqdm(total=int(num_patchfy_process * num_iter), desc='patchfy feature', disable=not show_progress)
         for i_batch in range(0, len(imgs), batch_size_patchfy):
             feat_tmp = []
             for feat_layer in feat:
@@ -175,12 +189,13 @@ class FeatExtract:
 
             # adaptive average pooling for each feature vector
             for i in range(len(feat)):
-                _feat = feat[i]
+                _feat = feat[i] * self.layer_weights[i]
+
                 # (BHW, C, PH, PW) -> (BHW, 1, CPHPW)
                 _feat = _feat.reshape(len(_feat), 1, -1)
+
                 # (BHW, 1, CPHPW) -> (BHW, D_e)
-                _feat = F.adaptive_avg_pool1d(_feat,
-                                              self.dim_each_feat).squeeze(1)
+                _feat = F.adaptive_avg_pool1d(_feat, self.dim_each_feat).squeeze(1)
                 feat[i] = _feat
                 pbar.update(1)
 

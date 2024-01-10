@@ -1,16 +1,20 @@
 import os
 import numpy as np
 from argparse import ArgumentParser
-import csv
+import torch
+import cv2
+from PIL import Image
+from tqdm import tqdm
 
 from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
 from utils.metrics import calc_imagewise_metrics, calc_pixelwise_metrics, calc_roc_best_score
-from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap
-from datasets.mvtec_dataset import MVTecDataset
+from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap, pickup_patch_from_coreset_patch, draw_heatmap
+
+from datasets.mvtec_dataset import MVTecDatasetInfer, MVTecDataset
+
 from models.feat_extract import FeatExtract
 from models.patchcore import PatchCore
-import torch
 
 
 def arg_parser():
@@ -35,6 +39,10 @@ def arg_parser():
 
     parser.add_argument('--score_max', type=float, help='Value for normalization to use when visualizing')
 
+    parser.add_argument('--frame_skip', type=int, default=4, help='Set the number of frames to skip when visualizing video')
+
+    parser.add_argument('--display_video', action='store_true', help='If you want to display video during inference, set')
+
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
                         help='batch-size for feature extraction by ImageNet model')
@@ -45,6 +53,10 @@ def arg_parser():
     parser.add_argument('-fh', '--flip_horz', action='store_true', help='flip horizontal')
     parser.add_argument('-fv', '--flip_vert', action='store_true', help='flip vertical')
     parser.add_argument('-tt', '--types_data', nargs='*', type=str, default=None)
+
+    parser.add_argument('--path_input_video', type=str)
+    parser.add_argument('--path_coreset_patch_img', type=str)
+
     # feature extraction related
     parser.add_argument('-b', '--backbone', type=str,
                         default='torchvision.models.wide_resnet50_2',
@@ -55,18 +67,9 @@ def arg_parser():
     parser.add_argument('-lm', '--layer_map', nargs='+', type=str,
                         default=['layer2[-1]', 'layer3[-1]'],
                         help='specify layers to extract feature map')
-# <<<<<<< add_inference_code
-
-    parser.add_argument('--layer_weights', nargs='+', type=float,
-                        default=[1.0, 1.0],
-                        help='specify layers weights for merge of feature map')
 
     parser.add_argument('--merge_dst_layer', type=str, default='layer2[-1]',
                         help='layer, which specifies a layer with spatial information as a reference when merging layer')
-# =======
-    parser.add_argument('-lmr', '--layer_merge_ref', type=str, default='layer2[-1]',
-                        help='specify the layer to use as a reference for spatial size when merging feature maps')
-# >>>>>>> main
 
     parser.add_argument('--faiss_save_dir', type=str, default='output', help='Specify the directory to output faiss index')
     parser.add_argument('--coreset_patch_save_dir', type=str, default='output', help='Specify where to save coreset patch')
@@ -89,6 +92,9 @@ def arg_parser():
                         help='dimension to project features for sampling')
     parser.add_argument('-ni', '--num_initial_coreset', type=int, default=10,
                         help='number of samples to initially randomly select coreset')
+
+    parser.add_argument('--faiss_index_path', type=str, help='Specify the file where the faiss index is saved')
+
     # Nearest-Neighbor related
     parser.add_argument('-k', '--k', type=int, default=5,
                         help='nearest neighbor\'s k for coreset searching')
@@ -100,92 +106,111 @@ def arg_parser():
     return args
 
 
-def save_best_thr(args, thr, idx, type_data):
-    save_path = os.path.join(args.thr_save_dir, f'{type_data}_thr.csv')
+def apply_patchcore(args, feat_ext, patchcore, frame, cfg_draw):
+    img = cv2.resize(frame, (ConfigData.SHAPE_MIDDLE[1], ConfigData.SHAPE_MIDDLE[0]), interpolation=cv2.INTER_AREA)
 
-    with open(save_path, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['thr', 'idx'])
-        writer.writerow([thr, idx])
+    img = img[
+          ConfigData.pixel_cut[0]:(ConfigData.SHAPE_INPUT[0] + ConfigData.pixel_cut[0]),
+          ConfigData.pixel_cut[1]:(ConfigData.SHAPE_INPUT[1] + ConfigData.pixel_cut[1])
+    ]
 
-
-def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
-    print('\n----> PatchCore processing in %s start' % type_data)
-    tic()
-
-    # read images
-    MVTecDataset(type_data)
-
-    # reset neighbor
-    patchcore.reset_neighbor()
-
-    if args.verbose:
-        # reset index
-        idx_coreset_total = []
-
-    # loop of split-sequential to apply k-center-greedy
-    num_pitch = int(np.ceil(len(MVTecDataset.imgs_train) / patchcore.num_split_seq))
-    for i_split in range(patchcore.num_split_seq):
-        # extract features
-        i_from = i_split * num_pitch
-        i_to = min(((i_split + 1) * num_pitch), len(MVTecDataset.imgs_train))
-        if patchcore.num_split_seq > 1:
-            print('[split%02d] image index range is %d~%d' % (i_split, i_from, (i_to - 1)))
-        feat_train = feat_ext.extract(MVTecDataset.imgs_train[i_from:i_to])
-
-        # coreset-reduced patch-feature memory bank
-        idx_coreset = patchcore.compute_greedy_coreset_idx(feat_train)
-        feat_train = feat_train[idx_coreset]
-
-        # add feature as neighbor
-        patchcore.add_neighbor(feat_train)
-
-        if args.verbose:
-            # stock index
-            offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
-            idx_coreset_total.append(idx_coreset + offset_split)
-
-    patchcore.save_neighbor(type_data)
-
-    if args.verbose:
-        # concat index
-        idx_coreset_total = np.hstack(idx_coreset_total)
-        patchcore.save_coreset_patch(idx_coreset_total, type_data, MVTecDataset.imgs_train, feat_ext.HW_map(), cfg_draw)
-
-    # extract features
+    type_name = 'infer_video'
     feat_test = {}
-    for type_test in MVTecDataset.imgs_test.keys():
-        feat_test[type_test] = feat_ext.extract(MVTecDataset.imgs_test[type_test],
-                                                case='test (case:%s)' % type_test)
+    feat_test[type_name] = feat_ext.extract(img[None], case='', show_progress=False)
+    D, D_max, I = patchcore.localization(feat_test, show_progress=False)
 
-    # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
-    D, D_max, I = patchcore.localization(feat_test)
-
-    # measure per image
-    fpr_img, tpr_img, thr_img, rocauc_img = calc_imagewise_metrics(D)
-    print('%s imagewise ROCAUC: %.3f' % (type_data, rocauc_img))
-
-    best_img_thr, best_img_thr_idx = calc_roc_best_score(fpr_img, tpr_img, thr_img)
-    save_best_thr(args, best_img_thr, best_img_thr_idx, type_data)
-
-    fpr_pix, tpr_pix, rocauc_pix = calc_pixelwise_metrics(D, MVTecDataset.gts_test)
-    print('%s pixelwise ROCAUC: %.3f' % (type_data, rocauc_pix))
-
-    toc(tag=('----> PatchCore processing in %s end, elapsed time' % type_data))
-
-    draw_distance_graph(type_data, cfg_draw, D, rocauc_img)
-    if args.verbose:
-        draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, args.score_max if args.score_max else D_max,
-                     MVTecDataset.imgs_test, MVTecDataset.files_test,
-                     idx_coreset_total, I, MVTecDataset.imgs_train, feat_ext.HW_map())
+    return img, D, D_max, I
 
 
-    return [fpr_img, tpr_img, rocauc_img, fpr_pix, tpr_pix, rocauc_pix]
+def inference(args, feat_ext, patchcore, cfg_draw):
+    patchcore.reset_neighbor()
+    patchcore.load_neighbor_from_file(args.faiss_index_path)
+
+    cap = cv2.VideoCapture(args.path_input_video)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    pbar = tqdm(total=total_frames, desc='Processing Video')
+
+    frame_width = 1000
+    frame_height = 1800
+
+    output_filename = 'output.mp4'
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_filename, fourcc, fps, (frame_width, frame_height))
+
+    coreset_patch_img = patchcore.load_coreset_patch_from_file(args.path_coreset_patch_img)
+
+    frame_count = 0
+    while cap.isOpened():
+        ret = cap.grab()
+        frame_count += 1
+
+        pbar.update(1)
+
+        if not ret:
+            break
+
+        if frame_count % args.frame_skip != 0:
+            continue
+
+        ret, frame = cap.retrieve()
+        if not ret:
+            break
+
+        resized_frame, distance, distance_max, index = apply_patchcore(
+            args,
+            feat_ext,
+            patchcore,
+            frame,
+            cfg_draw)
+
+        type_data = 'infer_video'
+        imgs_test = {type_data: resized_frame[None]}
+        y = {}
+        files_test = {type_data: [args.path_input_video]}
+
+        img_figure_dict = draw_heatmap(
+            type_data,
+            cfg_draw,
+            distance,
+            y,
+            distance_max,
+            imgs_test,
+            files_test,
+            coreset_patch_img,
+            index,
+            None,
+            feat_ext.HW_map(),
+            coreset_patch_img=coreset_patch_img,
+            is_save_file=False,
+            is_tqdm=False
+        )
+
+        img_figure = img_figure_dict['infer_video'][:, :, ::-1]
+
+        if args.display_video:
+            cv2.imshow('Processed Frame', img_figure)
+
+        out.write(img_figure)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    pbar.close()
+    cap.release()
+    out.release()
+    cv2.destroyAllWindows()
 
 
 def main(args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
 
     ConfigData(args)  # static define for speed-up
     cfg_feat = ConfigFeat(args)
@@ -195,43 +220,7 @@ def main(args):
     feat_ext = FeatExtract(cfg_feat)
     patchcore = PatchCore(cfg_patchcore, feat_ext.HW_map())
 
-    os.makedirs(args.path_result, exist_ok=True)
-    for type_data in ConfigData.types_data:
-        os.makedirs(os.path.join(args.path_result, type_data), exist_ok=True)
-
-    fpr_img = {}
-    tpr_img = {}
-    rocauc_img = {}
-    fpr_pix = {}
-    tpr_pix = {}
-    rocauc_pix = {}
-
-    # loop for types of data
-    for type_data in ConfigData.types_data:
-        result = apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw)
-
-        fpr_img[type_data] = result[0]
-        tpr_img[type_data] = result[1]
-        rocauc_img[type_data] = result[2]
-
-        fpr_pix[type_data] = result[3]
-        tpr_pix[type_data] = result[4]
-        rocauc_pix[type_data] = result[5]
-
-    rocauc_img_mean = np.array([rocauc_img[type_data] for type_data in ConfigData.types_data])
-    rocauc_img_mean = np.mean(rocauc_img_mean)
-    rocauc_pix_mean = np.array([rocauc_pix[type_data] for type_data in ConfigData.types_data])
-    rocauc_pix_mean = np.mean(rocauc_pix_mean)
-
-    draw_roc_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, rocauc_img_mean,
-                             fpr_pix, tpr_pix, rocauc_pix, rocauc_pix_mean)
-
-    for type_data in ConfigData.types_data:
-        print('rocauc_img[%s] = %.3f' % (type_data, rocauc_img[type_data]))
-    print('rocauc_img[mean] = %.3f' % rocauc_img_mean)
-    for type_data in ConfigData.types_data:
-        print('rocauc_pix[%s] = %.3f' % (type_data, rocauc_pix[type_data]))
-    print('rocauc_pix[mean] = %.3f' % rocauc_pix_mean)
+    inference(args, feat_ext, patchcore, cfg_draw)
 
 
 if __name__ == '__main__':
