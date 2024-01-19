@@ -1,7 +1,9 @@
 import os
-import numpy as np
 from argparse import ArgumentParser
 import csv
+
+import numpy as np
+import torch
 
 from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
@@ -10,7 +12,6 @@ from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap
 from datasets.mvtec_dataset import MVTecDataset
 from models.feat_extract import FeatExtract
 from models.patchcore import PatchCore
-import torch
 
 
 def arg_parser():
@@ -24,16 +25,16 @@ def arg_parser():
                         help='parent path of data input path')
     parser.add_argument('-pr', '--path_result', type=str, default='./result',
                         help='output path of figure image as the evaluation result')
+    parser.add_argument('-pt', '--path_trained', type=str, default='output',
+                        help='output path of trained products')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='save visualization of localization')
     parser.add_argument('-srf', '--size_receptive_field', type=int, default=15,
                         help='estimate and specify receptive field size (odd number)')
     parser.add_argument('-mv', '--mode_visualize', type=str, default='eval',
                         choices=['eval', 'infer'], help='set mode, [eval] or [infer]')
-
-    parser.add_argument('--thr_save_dir', type=str, default='output', help='Specify the directory to output img thresholds')
-
-    parser.add_argument('--score_max', type=float, help='Value for normalization to use when visualizing')
+    parser.add_argument('-sm', '--score_max', type=float, default=None,
+                        help='value for normalization of visualizing')
 
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
@@ -55,21 +56,11 @@ def arg_parser():
     parser.add_argument('-lm', '--layer_map', nargs='+', type=str,
                         default=['layer2[-1]', 'layer3[-1]'],
                         help='specify layers to extract feature map')
-# <<<<<<< add_inference_code
-
-    parser.add_argument('--layer_weights', nargs='+', type=float,
+    parser.add_argument('-lw', '--layer_weight', nargs='+', type=float,
                         default=[1.0, 1.0],
                         help='specify layers weights for merge of feature map')
-
-    parser.add_argument('--merge_dst_layer', type=str, default='layer2[-1]',
-                        help='layer, which specifies a layer with spatial information as a reference when merging layer')
-# =======
     parser.add_argument('-lmr', '--layer_merge_ref', type=str, default='layer2[-1]',
                         help='specify the layer to use as a reference for spatial size when merging feature maps')
-# >>>>>>> main
-
-    parser.add_argument('--faiss_save_dir', type=str, default='output', help='Specify the directory to output faiss index')
-    parser.add_argument('--coreset_patch_save_dir', type=str, default='output', help='Specify where to save coreset patch')
 
     # patchification related
     parser.add_argument('-sp', '--size_patch', type=int, default=3,
@@ -101,12 +92,20 @@ def arg_parser():
 
 
 def save_best_thr(args, thr, idx, type_data):
-    save_path = os.path.join(args.thr_save_dir, f'{type_data}_thr.csv')
+    save_path = os.path.join(args.path_trained, f'{type_data}_thr.csv')
 
     with open(save_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['thr', 'idx'])
         writer.writerow([thr, idx])
+
+
+def set_seed(seed, gpu=True):
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if gpu:
+        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed_all(args.seed)
 
 
 def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
@@ -175,7 +174,7 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
 
     draw_distance_graph(type_data, cfg_draw, D, rocauc_img)
     if args.verbose:
-        draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, args.score_max if args.score_max else D_max,
+        draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, D_max,
                      MVTecDataset.imgs_test, MVTecDataset.files_test,
                      idx_coreset_total, I, MVTecDataset.imgs_train, feat_ext.HW_map())
 
@@ -184,8 +183,8 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
 
 
 def main(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    # at first, set seed
+    set_seed(seed=args.seed, gpu=(not args.cpu))
 
     ConfigData(args)  # static define for speed-up
     cfg_feat = ConfigFeat(args)
