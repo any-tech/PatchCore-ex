@@ -1,16 +1,13 @@
 import os
 import numpy as np
 from argparse import ArgumentParser
-import csv
-import pandas as pd
-import torch
+import json
 
 from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
-from utils.metrics import calc_imagewise_metrics, calc_pixelwise_metrics, calc_roc_best_score
-from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap
+from utils.visualize import draw_heatmap
 
-from datasets.mvtec_dataset import MVTecDatasetInfer, MVTecDataset
+from datasets.mvtec_dataset import MVTecDatasetOnlyTest
 
 from models.feat_extract import FeatExtract
 from models.patchcore import PatchCore
@@ -22,67 +19,26 @@ def arg_parser():
     parser.add_argument('-n', '--num_cpu_max', default=4, type=int,
                         help='number of CPUs for parallel reading input images')
     parser.add_argument('-c', '--cpu', action='store_true', help='use cpu')
+
     # I/O and visualization related
-    parser.add_argument('-pp', '--path_parent', type=str, default='./mvtec_anomaly_detection',
-                        help='parent path of data input path')
+    parser.add_argument('-pd', '--path_data', type=str, default='./mvtec_anomaly_detection',
+                        help='parent path of input data path')
+    parser.add_argument('-pv', '--path_video', type=str, default=None,
+                        help='path of input video path (.mp4 or .avi or .mov)')
+    parser.add_argument('-pt', '--path_trained', type=str, default='./trained',
+                        help='output path of trained products')
     parser.add_argument('-pr', '--path_result', type=str, default='./result',
                         help='output path of figure image as the evaluation result')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='save visualization of localization')
-    parser.add_argument('-srf', '--size_receptive_field', type=int, default=15,
-                        help='estimate and specify receptive field size (odd number)')
-    parser.add_argument('-mv', '--mode_visualize', type=str, default='eval',
-                        choices=['eval', 'infer'], help='set mode, [eval] or [infer]')
-
-    parser.add_argument('--thr_save_dir', type=str, default='output', help='Specify the directory to output img thresholds')
-
-    parser.add_argument('--score_max', type=float, help='Value for normalization to use when visualizing')
+    parser.add_argument('-sm', '--score_max', type=float, default=None,
+                        help='value for normalization of visualizing')
 
     # data loader related
     parser.add_argument('-bs', '--batch_size', type=int, default=16,
                         help='batch-size for feature extraction by ImageNet model')
-    parser.add_argument('-sr', '--size_resize', nargs=2, type=int, default=[256, 256],
-                        help='size of resizing input image')
-    parser.add_argument('-sc', '--size_crop', nargs=2, type=int, default=[224, 224],
-                        help='size of cropping after resize')
-    parser.add_argument('-fh', '--flip_horz', action='store_true', help='flip horizontal')
-    parser.add_argument('-fv', '--flip_vert', action='store_true', help='flip vertical')
     parser.add_argument('-tt', '--types_data', nargs='*', type=str, default=None)
-    # feature extraction related
-    parser.add_argument('-b', '--backbone', type=str,
-                        default='torchvision.models.wide_resnet50_2',
-                        help='specify torchvision model with the full path')
-    parser.add_argument('-w', '--weight', type=str,
-                        default='torchvision.models.Wide_ResNet50_2_Weights.IMAGENET1K_V1',
-                        help='specify the trained weights of torchvision model with the full path')
-    parser.add_argument('-lm', '--layer_map', nargs='+', type=str,
-                        default=['layer2[-1]', 'layer3[-1]'],
-                        help='specify layers to extract feature map')
 
-    parser.add_argument('--merge_dst_layer', type=str, default='layer2[-1]',
-                        help='layer, which specifies a layer with spatial information as a reference when merging layer')
-
-    parser.add_argument('--faiss_save_dir', type=str, default='output', help='Specify the directory to output faiss index')
-    parser.add_argument('--coreset_patch_save_dir', type=str, default='output', help='Specify where to save coreset patch')
-
-    # patchification related
-    parser.add_argument('-sp', '--size_patch', type=int, default=3,
-                        help='patch pixel of feature map for increasing receptive field size')
-    parser.add_argument('-de', '--dim_each_feat', type=int, default=1024,
-                        help='dimension of extract feature (at 1st adaptive average pooling)')
-    parser.add_argument('-dm', '--dim_merge_feat', type=int, default=1024,
-                        help='dimension after layer feature merging (at 2nd adaptive average pooling)')
-    # coreset related
-    parser.add_argument('-s', '--seed', type=int, default=0,
-                        help='specify a random-seed for k-center-greedy')
-    parser.add_argument('-ns', '--num_split_seq', type=int, default=1,
-                        help='percentage of coreset to all patch features')
-    parser.add_argument('-pc', '--percentage_coreset', type=float, default=0.01,
-                        help='percentage of coreset to all patch features')
-    parser.add_argument('-ds', '--dim_sampling', type=int, default=128,
-                        help='dimension to project features for sampling')
-    parser.add_argument('-ni', '--num_initial_coreset', type=int, default=10,
-                        help='number of samples to initially randomly select coreset')
     # Nearest-Neighbor related
     parser.add_argument('-k', '--k', type=int, default=5,
                         help='nearest neighbor\'s k for coreset searching')
@@ -91,103 +47,111 @@ def arg_parser():
                         help='number of outer pixels to decay anomaly score')
 
     args = parser.parse_args()
+
+    # adjust...
+    if args.path_video is not None:
+        args.path_data = None
+
+    print('args =\n', args)
     return args
 
 
-def read_best_thr(args, type_data):
-    csv_file_path = os.path.join(args.thr_save_dir, f'{type_data}_thr.csv')
-    df_csv = pd.read_csv(csv_file_path)
-    thr = df_csv.loc[0, 'thr']
-
-    return thr
-
-
-def inference(score_list, file_list, threshold):
-    data = []
-    for type_test in score_list.keys():
-        for i in range(len(score_list[type_test])):
-            max_score = np.max(score_list[type_test][i])
-            abnormal = int(threshold <= max_score)
-
-            data.append({
-                'path': file_list[type_test][i],
-                'score': max_score,
-                'abnormal': abnormal,
-                'threshold': threshold
-            })
-
-    df = pd.DataFrame(data)
-
-    return df
+def check_args(args):
+    assert 0 < args.num_cpu_max < os.cpu_count()
+    if args.path_video is None:
+        assert args.path_data is not None
+        assert os.path.isdir(args.path_data)
+    else:
+        assert os.path.isfile(args.path_video)
+        assert ((args.path_video.split('.')[-1].lower() == 'mp4') |
+                (args.path_video.split('.')[-1].lower() == 'avi') |
+                (args.path_video.split('.')[-1].lower() == 'mov'))
+        assert len(args.types_data) == 1
+    if args.score_max is not None:
+        assert args.score_max > 0
+    assert args.batch_size > 0
+    if args.types_data is not None:
+        if args.path_video is None:
+            for type_data in args.types_data:
+                assert os.path.exists('%s/%s' % (args.path_data, type_data))
+    assert args.k > 0
+    assert args.pixel_outer_decay >= 0
 
 
-def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
-    print('\n----> PatchCore processing in %s start' % type_data)
+def summary_result(type_data, D, files_test, thresh):
+    result = ['data-type filename anomaly-score threshold abnormal-judgement']
+    for type_test in D.keys():
+        for i_file in range(len(D[type_test])):
+            D_max = np.max(D[type_test][i_file])
+            flg_abnormal = int(thresh <= D_max)
+
+            result.append('%s %s %.3f %.3f %d' %
+                          (type_data, files_test[type_test][i_file],
+                           D_max, thresh, flg_abnormal))
+
+    filename_txt = '%s/%s/%s_result.txt' % (args.path_result, type_data, type_data)
+    np.savetxt(filename_txt, result, fmt='%s')
+
+
+def apply_patchcore_inference(args, type_data, feat_ext, patchcore, cfg_draw):
+    print('\n----> inference-only PatchCore processing in %s start' % type_data)
     tic()
 
     # read images
-    MVTecDatasetInfer(type_data)
+    MVTecDatasetOnlyTest(type_data)
 
-    # reset neighbor
-    patchcore.reset_neighbor()
-    patchcore.load_neighbor(type_data)
+    # load neighbor
+    patchcore.reset_faiss_index()
+    patchcore.load_faiss_index(type_data)
 
     # extract features
     feat_test = {}
-    for type_test in MVTecDatasetInfer.imgs_test.keys():
-        feat_test[type_test] = feat_ext.extract(MVTecDatasetInfer.imgs_test[type_test], case='test (case:%s)' % type_test)
+    for type_test in MVTecDatasetOnlyTest.imgs_test.keys():
+        feat_test[type_test] = feat_ext.extract(MVTecDatasetOnlyTest.imgs_test[type_test],
+                                                case='test (case:%s)' % type_test)
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
-    D, D_max, I = patchcore.localization(feat_test)
+    D, D_max, I = patchcore.localization(feat_test, feat_ext.HW_map())
+
+    toc(tag=('----> inference-only PatchCore processing in %s end, elapsed time' % type_data))
 
     if args.verbose:
-        coreset_patch_idx, coreset_patch_img = patchcore.load_coreset_patch(type_data)
+        imgs_coreset = patchcore.load_coreset(type_data)
 
-        draw_heatmap(
-            type_data,
-            cfg_draw,
-            D,
-            MVTecDatasetInfer.gts_test,
-            args.score_max if args.score_max else D_max,
-            MVTecDatasetInfer.imgs_test,
-            MVTecDatasetInfer.files_test,
-            coreset_patch_idx,
-            I,
-            None,
-            feat_ext.HW_map(),
-            coreset_patch_img=coreset_patch_img
-        )
+        draw_heatmap(type_data, cfg_draw, D, None, D_max, I,
+                     MVTecDatasetOnlyTest.imgs_test, MVTecDatasetOnlyTest.files_test,
+                     imgs_coreset, feat_ext.HW_map())
 
-    img_thr = read_best_thr(args, type_data)
+    # load optimal threshold
+    thresh = np.loadtxt('%s/%s_thr.txt' % (args.path_trained, type_data))
 
-    df_result = inference(D, MVTecDatasetInfer.files_test, img_thr)
-    save_path = os.path.join(args.path_result, type_data, f'{type_data}_result.csv')
-    df_result.to_csv(save_path)
+    # summary test result
+    summary_result(type_data, D, MVTecDatasetOnlyTest.files_test, thresh)
 
 
 def main(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    ConfigData(args, mode_train=False)  # static define for speed-up
+    cfg_feat = ConfigFeat(args, mode_train=False)
+    cfg_patchcore = ConfigPatchCore(args, mode_train=False)
+    cfg_draw = ConfigDraw(args, mode_train=False)
 
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
-
-    ConfigData(args)  # static define for speed-up
-    cfg_feat = ConfigFeat(args)
-    cfg_patchcore = ConfigPatchCore(args)
-    cfg_draw = ConfigDraw(args)
+    with open('%s/args.json' % args.path_trained, mode='r') as f:
+        args_trained = json.load(f)
+    ConfigData.follow(args_trained)
+    cfg_feat.follow(args_trained)
+    cfg_patchcore.follow(args_trained)
+    cfg_draw.follow(args_trained)
 
     feat_ext = FeatExtract(cfg_feat)
-    patchcore = PatchCore(cfg_patchcore, feat_ext.HW_map())
+    patchcore = PatchCore(cfg_patchcore)
 
     os.makedirs(args.path_result, exist_ok=True)
     for type_data in ConfigData.types_data:
-        os.makedirs(os.path.join(args.path_result, type_data), exist_ok=True)
+        os.makedirs('%s/%s' % (args.path_result, type_data), exist_ok=True)
 
     # loop for types of data
     for type_data in ConfigData.types_data:
-        apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw)
+        apply_patchcore_inference(args, type_data, feat_ext, patchcore, cfg_draw)
 
 
 if __name__ == '__main__':

@@ -128,8 +128,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .idea
-faiss
 result
-result_*
+trained
 memo.txt
-output

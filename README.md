@@ -102,7 +102,7 @@ After running the code above, you can see the ROCAUC results in `result/roc_curv
 
 To test **PatchCore** on custom dataset:
 ```
-python main.py --path_parent ./custom_data
+python main.py --path_data ./custom_data
 ```
 
 <br/>

@@ -1,15 +1,13 @@
 import numpy as np
-import numba
 from tqdm import tqdm
-from sklearn.metrics import roc_curve
-# from sklearn.metrics import roc_auc_score
+from sklearn.metrics import auc, roc_curve, precision_recall_curve
 
 
 def calc_imagewise_metrics(D, type_normal='good'):
     D_list = []
     y_list = []
 
-    pbar = tqdm(total=int(len(D.keys()) + 3),
+    pbar = tqdm(total=int(len(D.keys()) + 5),
                 desc='calculate imagewise metrics')
     for type_test in D.keys():
         for i in range(len(D[type_test])):
@@ -20,25 +18,32 @@ def calc_imagewise_metrics(D, type_normal='good'):
             y_list.append(y_tmp)
         pbar.update(1)
 
-    D_flatten_list = np.array(D_list).reshape(-1)
-    y_flatten_list = np.array(y_list).reshape(-1)
+    D_flat_list = np.array(D_list).reshape(-1)
+    y_flat_list = np.array(y_list).reshape(-1)
     pbar.update(1)
 
-    fpr, tpr, thresholds = roc_curve(y_flatten_list, D_flatten_list)
+    fpr, tpr, _ = roc_curve(y_flat_list, D_flat_list)
     pbar.update(1)
 
-    rocauc = roc_auc_score(y_flatten_list, D_flatten_list)
+    rocauc = auc(fpr, tpr)
+    pbar.update(1)
+
+    pre, rec, _ = precision_recall_curve(y_flat_list, D_flat_list)
+    pbar.update(1)
+
+    # https://sinyi-chou.github.io/python-sklearn-precision-recall/
+    prauc = auc(rec, pre)
     pbar.update(1)
     pbar.close()
 
-    return fpr, tpr, thresholds, rocauc
+    return fpr, tpr, rocauc, pre, rec, prauc
 
 
 def calc_pixelwise_metrics(D, y):
     D_list = []
     y_list = []
 
-    pbar = tqdm(total=int(len(D.keys()) + 3),
+    pbar = tqdm(total=int(len(D.keys()) + 6),
                 desc='calculate pixelwise metrics')
     for type_test in D.keys():
         for i in range(len(D[type_test])):
@@ -49,59 +54,33 @@ def calc_pixelwise_metrics(D, y):
             y_list.append(y_tmp)
         pbar.update(1)
 
-    D_flatten_list = np.array(D_list).reshape(-1)
+    D_flat_list = np.array(D_list).reshape(-1)
+    y_flat_list = np.array(y_list).reshape(-1)
     pbar.update(1)
 
-    y_flatten_list = np.array(y_list).reshape(-1)
+    fpr, tpr, _ = roc_curve(y_flat_list, D_flat_list)
     pbar.update(1)
 
-    fpr, tpr, _ = roc_curve(y_flatten_list, D_flatten_list)
-    rocauc = roc_auc_score(y_flatten_list, D_flatten_list)
+    rocauc = auc(fpr, tpr)
+    pbar.update(1)
+
+    pre, rec, thresh = precision_recall_curve(y_flat_list, D_flat_list)
+    pbar.update(1)
+
+    prauc = auc(rec, pre)
+    pbar.update(1)
+
+    # https://github.com/xiahaifeng1995/PaDiM-Anomaly-Detection-Localization-master/blob/main/main.py#L193C1-L200C1
+    # get optimal threshold
+    a = 2 * pre * rec
+    b = pre + rec
+    f1 = np.divide(a, b, out=np.zeros_like(a), where=(b != 0))
+    i_opt = np.argmax(f1)
+    thresh_opt = thresh[i_opt]
     pbar.update(1)
     pbar.close()
 
-    return fpr, tpr, rocauc
+    print('pixelwise optimal threshold:%.3f (precision:%.3f, recall:%.3f)' %
+          (thresh_opt, pre[i_opt], rec[i_opt]))
 
-
-# https://github.com/diditforlulz273/fastauc/blob/main/fastauc/fast_auc.py
-def roc_auc_score(y_true, y_score):
-    # binary clf curve
-    y_true = (y_true == 1)
-
-    desc_score_indices = np.argsort(y_score, kind="mergesort")[::-1]
-    y_score = y_score[desc_score_indices]
-    y_true = y_true[desc_score_indices]
-
-    distinct_value_indices = np.where(np.diff(y_score))[0]
-    threshold_idxs = np.r_[distinct_value_indices, y_true.size - 1]
-
-    tps = np.cumsum(y_true)[threshold_idxs]
-    fps = 1 + threshold_idxs - tps
-
-    # roc
-    tps = np.r_[0, tps]
-    fps = np.r_[0, fps]
-
-    if fps[-1] <= 0 or tps[-1] <= 0:
-        return np.nan
-
-    # auc
-    direction = 1
-    dx = np.diff(fps)
-    if np.any(dx < 0):
-        if np.all(dx <= 0):
-            direction = -1
-        else:
-            return 'error'
-
-    area = direction * np.trapz(tps, fps) / (tps[-1] * fps[-1])
-
-    return area
-
-
-def calc_roc_best_score(fpr, tpr, thresholds):
-    gmeans = np.sqrt(tpr * (1 - fpr))
-    ix = np.argmax(gmeans)
-    roc_threshold = thresholds[ix]
-
-    return roc_threshold, ix
+    return fpr, tpr, rocauc, pre, rec, prauc, thresh_opt

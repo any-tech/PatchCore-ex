@@ -1,14 +1,15 @@
 import os
 from argparse import ArgumentParser
-import csv
+import json
 
 import numpy as np
 import torch
+import multiprocessing as mp
 
 from utils.config import ConfigData, ConfigFeat, ConfigPatchCore, ConfigDraw
 from utils.tictoc import tic, toc
-from utils.metrics import calc_imagewise_metrics, calc_pixelwise_metrics, calc_roc_best_score
-from utils.visualize import draw_roc_curve, draw_distance_graph, draw_heatmap
+from utils.metrics import calc_imagewise_metrics, calc_pixelwise_metrics
+from utils.visualize import draw_curve, draw_distance_graph, draw_heatmap
 from datasets.mvtec_dataset import MVTecDataset
 from models.feat_extract import FeatExtract
 from models.patchcore import PatchCore
@@ -20,16 +21,17 @@ def arg_parser():
     parser.add_argument('-n', '--num_cpu_max', default=4, type=int,
                         help='number of CPUs for parallel reading input images')
     parser.add_argument('-c', '--cpu', action='store_true', help='use cpu')
+
     # I/O and visualization related
-    parser.add_argument('-pp', '--path_parent', type=str, default='./mvtec_anomaly_detection',
-                        help='parent path of data input path')
+    parser.add_argument('-pd', '--path_data', type=str, default='./mvtec_anomaly_detection',
+                        help='parent path of input data path')
+    parser.add_argument('-pt', '--path_trained', type=str, default='./trained',
+                        help='output path of trained products')
     parser.add_argument('-pr', '--path_result', type=str, default='./result',
                         help='output path of figure image as the evaluation result')
-    parser.add_argument('-pt', '--path_trained', type=str, default='output',
-                        help='output path of trained products')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='save visualization of localization')
-    parser.add_argument('-srf', '--size_receptive_field', type=int, default=15,
+    parser.add_argument('-srf', '--size_receptive', type=int, default=9,
                         help='estimate and specify receptive field size (odd number)')
     parser.add_argument('-mv', '--mode_visualize', type=str, default='eval',
                         choices=['eval', 'infer'], help='set mode, [eval] or [infer]')
@@ -69,6 +71,7 @@ def arg_parser():
                         help='dimension of extract feature (at 1st adaptive average pooling)')
     parser.add_argument('-dm', '--dim_merge_feat', type=int, default=1024,
                         help='dimension after layer feature merging (at 2nd adaptive average pooling)')
+
     # coreset related
     parser.add_argument('-s', '--seed', type=int, default=0,
                         help='specify a random-seed for k-center-greedy')
@@ -88,27 +91,48 @@ def arg_parser():
                         help='number of outer pixels to decay anomaly score')
 
     args = parser.parse_args()
+
+    print('args =\n', args)
     return args
 
 
-def save_best_thr(args, thr, idx, type_data):
-    save_path = os.path.join(args.path_trained, f'{type_data}_thr.csv')
-
-    with open(save_path, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['thr', 'idx'])
-        writer.writerow([thr, idx])
+def check_args(args):
+    assert 0 < args.num_cpu_max < os.cpu_count()
+    assert os.path.isdir(args.path_data)
+    assert (args.size_receptive % 2) == 1
+    assert args.size_receptive > 0
+    if args.score_max is not None:
+        assert args.score_max > 0
+    assert args.batch_size > 0
+    assert args.size_resize[0] > 0
+    assert args.size_resize[1] > 0
+    assert args.size_crop[0] > 0
+    assert args.size_crop[1] > 0
+    if args.types_data is not None:
+        for type_data in args.types_data:
+            assert os.path.isdir('%s/%s' % (args.path_data, type_data))
+    assert len(args.layer_map) == len(args.layer_weight)
+    assert args.layer_merge_ref in args.layer_map
+    assert args.size_patch > 0
+    assert args.dim_each_feat > 0
+    assert args.dim_merge_feat > 0
+    assert args.num_split_seq > 0
+    assert 0.0 < args.percentage_coreset <= 1.0
+    assert args.dim_sampling > 0
+    assert args.num_initial_coreset > 0
+    assert args.k > 0
+    assert args.pixel_outer_decay >= 0
 
 
 def set_seed(seed, gpu=True):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     if gpu:
-        torch.cuda.manual_seed(args.seed)
-        torch.cuda.manual_seed_all(args.seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
 
-def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
+def apply_patchcore(type_data, feat_ext, patchcore, cfg_draw):
     print('\n----> PatchCore processing in %s start' % type_data)
     tic()
 
@@ -116,11 +140,10 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
     MVTecDataset(type_data)
 
     # reset neighbor
-    patchcore.reset_neighbor()
+    patchcore.reset_faiss_index()
 
-    if args.verbose:
-        # reset index
-        idx_coreset_total = []
+    # reset total index
+    idx_coreset_total = []
 
     # loop of split-sequential to apply k-center-greedy
     num_pitch = int(np.ceil(len(MVTecDataset.imgs_train) / patchcore.num_split_seq))
@@ -139,17 +162,20 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
         # add feature as neighbor
         patchcore.add_neighbor(feat_train)
 
-        if args.verbose:
-            # stock index
-            offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
-            idx_coreset_total.append(idx_coreset + offset_split)
+        # stock index
+        offset_split = i_from * feat_ext.HW_map()[0] * feat_ext.HW_map()[1]
+        idx_coreset_total.append(idx_coreset + offset_split)
 
-    patchcore.save_neighbor(type_data)
+    # save faiss index    
+    patchcore.save_faiss_index(type_data)
 
-    if args.verbose:
-        # concat index
-        idx_coreset_total = np.hstack(idx_coreset_total)
-        patchcore.save_coreset_patch(idx_coreset_total, type_data, MVTecDataset.imgs_train, feat_ext.HW_map(), cfg_draw)
+    # concat index
+    idx_coreset_total = np.hstack(idx_coreset_total)
+
+    # save and get images of coreset
+    imgs_coreset = patchcore.save_coreset(idx_coreset_total, type_data,
+                                          MVTecDataset.imgs_train, feat_ext.HW_map(),
+                                          cfg_draw.size_receptive)
 
     # extract features
     feat_test = {}
@@ -158,81 +184,111 @@ def apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw):
                                                 case='test (case:%s)' % type_test)
 
     # Sub-Image Anomaly Detection with Deep Pyramid Correspondences
-    D, D_max, I = patchcore.localization(feat_test)
+    D, D_max, I = patchcore.localization(feat_test, feat_ext.HW_map())
 
     # measure per image
-    fpr_img, tpr_img, thr_img, rocauc_img = calc_imagewise_metrics(D)
+    fpr_img, tpr_img, rocauc_img, pre_img, rec_img, prauc_img = calc_imagewise_metrics(D)
     print('%s imagewise ROCAUC: %.3f' % (type_data, rocauc_img))
 
-    best_img_thr, best_img_thr_idx = calc_roc_best_score(fpr_img, tpr_img, thr_img)
-    save_best_thr(args, best_img_thr, best_img_thr_idx, type_data)
-
-    fpr_pix, tpr_pix, rocauc_pix = calc_pixelwise_metrics(D, MVTecDataset.gts_test)
+    # measure per pixel
+    (fpr_pix, tpr_pix, rocauc_pix,
+     pre_pix, rec_pix, prauc_pix, thresh_opt) = calc_pixelwise_metrics(D, MVTecDataset.gts_test)
     print('%s pixelwise ROCAUC: %.3f' % (type_data, rocauc_pix))
+
+    # save optimal threshold
+    np.savetxt('%s/%s_thr.txt' % (args.path_trained, type_data),
+               np.array([thresh_opt]), fmt='%.3f')
 
     toc(tag=('----> PatchCore processing in %s end, elapsed time' % type_data))
 
     draw_distance_graph(type_data, cfg_draw, D, rocauc_img)
-    if args.verbose:
-        draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, D_max,
+    if cfg_draw.verbose:
+        draw_heatmap(type_data, cfg_draw, D, MVTecDataset.gts_test, D_max, I,
                      MVTecDataset.imgs_test, MVTecDataset.files_test,
-                     idx_coreset_total, I, MVTecDataset.imgs_train, feat_ext.HW_map())
+                     imgs_coreset, feat_ext.HW_map())
 
-
-    return [fpr_img, tpr_img, rocauc_img, fpr_pix, tpr_pix, rocauc_pix]
+    return [fpr_img, tpr_img, rocauc_img, pre_img, rec_img, prauc_img,
+            fpr_pix, tpr_pix, rocauc_pix, pre_pix, rec_pix, prauc_pix]
 
 
 def main(args):
-    # at first, set seed
-    set_seed(seed=args.seed, gpu=(not args.cpu))
-
     ConfigData(args)  # static define for speed-up
     cfg_feat = ConfigFeat(args)
     cfg_patchcore = ConfigPatchCore(args)
     cfg_draw = ConfigDraw(args)
 
     feat_ext = FeatExtract(cfg_feat)
-    patchcore = PatchCore(cfg_patchcore, feat_ext.HW_map())
+    patchcore = PatchCore(cfg_patchcore)
 
     os.makedirs(args.path_result, exist_ok=True)
     for type_data in ConfigData.types_data:
-        os.makedirs(os.path.join(args.path_result, type_data), exist_ok=True)
+        os.makedirs('%s/%s' % (args.path_result, type_data), exist_ok=True)
 
     fpr_img = {}
     tpr_img = {}
     rocauc_img = {}
+    pre_img = {}
+    rec_img = {}
+    prauc_img = {}
     fpr_pix = {}
     tpr_pix = {}
     rocauc_pix = {}
+    pre_pix = {}
+    rec_pix = {}
+    prauc_pix = {}
 
     # loop for types of data
     for type_data in ConfigData.types_data:
-        result = apply_patchcore(args, type_data, feat_ext, patchcore, cfg_draw)
+        set_seed(seed=args.seed, gpu=(not args.cpu))
+
+        result = apply_patchcore(type_data, feat_ext, patchcore, cfg_draw)
 
         fpr_img[type_data] = result[0]
         tpr_img[type_data] = result[1]
         rocauc_img[type_data] = result[2]
+        pre_img[type_data] = result[3]
+        rec_img[type_data] = result[4]
+        prauc_img[type_data] = result[5]
 
-        fpr_pix[type_data] = result[3]
-        tpr_pix[type_data] = result[4]
-        rocauc_pix[type_data] = result[5]
+        fpr_pix[type_data] = result[6]
+        tpr_pix[type_data] = result[7]
+        rocauc_pix[type_data] = result[8]
+        pre_pix[type_data] = result[9]
+        rec_pix[type_data] = result[10]
+        prauc_pix[type_data] = result[11]
 
     rocauc_img_mean = np.array([rocauc_img[type_data] for type_data in ConfigData.types_data])
     rocauc_img_mean = np.mean(rocauc_img_mean)
+    prauc_img_mean = np.array([prauc_img[type_data] for type_data in ConfigData.types_data])
+    prauc_img_mean = np.mean(prauc_img_mean)
     rocauc_pix_mean = np.array([rocauc_pix[type_data] for type_data in ConfigData.types_data])
     rocauc_pix_mean = np.mean(rocauc_pix_mean)
+    prauc_pix_mean = np.array([prauc_pix[type_data] for type_data in ConfigData.types_data])
+    prauc_pix_mean = np.mean(prauc_pix_mean)
 
-    draw_roc_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, rocauc_img_mean,
-                             fpr_pix, tpr_pix, rocauc_pix, rocauc_pix_mean)
+    draw_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, rocauc_img_mean,
+                         fpr_pix, tpr_pix, rocauc_pix, rocauc_pix_mean)
+    draw_curve(cfg_draw, rec_img, pre_img, prauc_img, prauc_img_mean,
+                         rec_pix, pre_pix, prauc_pix, prauc_pix_mean, False)
 
     for type_data in ConfigData.types_data:
         print('rocauc_img[%s] = %.3f' % (type_data, rocauc_img[type_data]))
     print('rocauc_img[mean] = %.3f' % rocauc_img_mean)
     for type_data in ConfigData.types_data:
+        print('prauc_img[%s] = %.3f' % (type_data, prauc_img[type_data]))
+    print('prauc_img[mean] = %.3f' % prauc_img_mean)
+    for type_data in ConfigData.types_data:
         print('rocauc_pix[%s] = %.3f' % (type_data, rocauc_pix[type_data]))
     print('rocauc_pix[mean] = %.3f' % rocauc_pix_mean)
-
+    for type_data in ConfigData.types_data:
+        print('prauc_pix[%s] = %.3f' % (type_data, prauc_pix[type_data]))
+    print('prauc_pix[mean] = %.3f' % prauc_pix_mean)
 
 if __name__ == '__main__':
     args = arg_parser()
+    check_args(args)
     main(args)
+
+    with open('%s/args.json' % args.path_trained, mode='w') as f:
+        json.dump(args.__dict__, f, indent=4)
+

@@ -3,7 +3,6 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from PIL import Image
 
 
 # https://github.com/gsurma/cnn_explainer/blob/main/utils.py
@@ -24,8 +23,8 @@ def draw_distance_graph(type_data, cfg_draw, D, rocauc_img):
     D_list = {}
     for type_test in D.keys():
         D_list[type_test] = []
-        for i in range(len(D[type_test])):
-            D_tmp = np.max(D[type_test][i])
+        for i_D in range(len(D[type_test])):
+            D_tmp = np.max(D[type_test][i_D])
             D_list[type_test].append(D_tmp)
         D_list[type_test] = np.array(D_list[type_test])
 
@@ -51,60 +50,68 @@ def draw_distance_graph(type_data, cfg_draw, D, rocauc_img):
         N_test += len(D_list[type_test])
 
     plt.subplot(2, 1, 1)
-    plt.title('imagewise anomaly detection accuracy (ROCAUC %%) : %.3f' % rocauc_img)
+    plt.title('imagewise ROCAUC %% : %.3f' % rocauc_img)
     plt.grid()
-    plt.legend()
+    plt.legend(loc='upper left')
     plt.subplot(2, 1, 2)
     plt.grid()
-    plt.legend()
+    plt.legend(loc='upper right')
     plt.gcf().tight_layout()
-    plt.gcf().savefig(os.path.join(cfg_draw.path_result, type_data,
-                                   ('pred-dist_%s_p%04d_k%02d_r%04d.png' %
-                                    (type_data, (cfg_draw.percentage_coreset * 1000),
-                                     cfg_draw.k, round(rocauc_img * 1000)))))
+    plt.gcf().savefig(('%s/%s/pred-dist_%s_p%04d_k%02d_rocaucimg%04d.png' %
+                       (cfg_draw.path_result, type_data,
+                        type_data, (cfg_draw.percentage_coreset * 1000),
+                        cfg_draw.k, round(rocauc_img * 1000))))
     plt.clf()
     plt.close()
 
 
-def conditional_tqdm(iterator, verbose=False, desc=''):
-    if verbose:
-        return tqdm(iterator, desc=desc)
+def draw_heatmap(type_data, cfg_draw, D, y, D_max, I, imgs_test, files_test,
+                 imgs_coreset, HW_map):
+
+    if cfg_draw.mode_visualize == 'eval':
+        fig_width = 10 * max(1, cfg_draw.aspect_figure)
+        fig_height = 18
+        pixel_cut=[160, 140, 60, 60]  # [top, bottom, left right]
     else:
-        return iterator
+        fig_width = 20 * max(1, cfg_draw.aspect_figure)
+        fig_height = 16
+        pixel_cut=[140, 120, 180, 180]  # [top, bottom, left right]
+    dpi = 100
 
-
-def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_coreset, I, imgs_train, HW_map,
-                 coreset_patch_img=None, is_save_file=True, is_tqdm=True):
-
-    img_figure_dict = {}
     for type_test in D.keys():
-        img_figure_list = []
-        for i in conditional_tqdm(range(len(D[type_test])), verbose=is_tqdm, desc='[verbose mode] visualize localization (case:%s)' % type_test):
-            file = files_test[type_test][i]
-            img = imgs_test[type_test][i]
-            score_map = D[type_test][i]
-            idx_patch = idx_coreset[I[type_test][i][:, 0]] if idx_coreset is not None else None
-            score_max = D_max
-            gt = y[type_test][i] if y != {} else None
 
-            if imgs_train is not None:
-                img_patch = pickup_patch(idx_patch, imgs_train, HW_map, cfg_draw.size_receptive_field)
-            elif coreset_patch_img is not None:
-                imgs_shape = imgs_test[type_test].shape[1:3]
-                idx_patch_one_img = I[type_test][i, :, 0]
-                img_patch = pickup_patch_from_coreset_patch(
-                    idx_patch_one_img,
-                    coreset_patch_img,
-                    imgs_shape,
-                    HW_map,
-                    cfg_draw.size_receptive_field)
+        if cfg_draw.mode_video:
+            filename_out = ('%s/%s/localization_%s_%s_p%04d_k%02d.mp4' %
+                            (cfg_draw.path_result, type_data,
+                             type_data, files_test[type_test][0].split('.')[0],
+                             (cfg_draw.percentage_coreset * 1000), cfg_draw.k))
+            # build writer
+            codecs = 'mp4v'
+            fourcc = cv2.VideoWriter_fourcc(*codecs)
+            width = (fig_width * dpi) - pixel_cut[2] - pixel_cut[3]
+            height = (fig_height * dpi) - pixel_cut[0] - pixel_cut[1]
+            writer = cv2.VideoWriter(filename_out, fourcc, cfg_draw.fps_video,
+                                     (width, height), True)
 
-            fig_width = 10 * max(1, cfg_draw.aspect_figure)
+        desc = '[verbose mode] visualize localization (case:%s)' % type_test
+        for i_D in tqdm(range(len(D[type_test])), desc=desc):
+            file = files_test[type_test][i_D]
+            img = imgs_test[type_test][i_D]
+            score_map = D[type_test][i_D]
+            if cfg_draw.score_max is None:
+                score_max = D_max
+            else:
+                score_max = cfg_draw.score_max
+            if y is not None:
+                gt = y[type_test][i_D]
 
-            fig_height = height = 18
-            dpi = 100
+            I_tmp = I[type_test][i_D, :, 0]
+            img_patch = assemble_patch(I_tmp, imgs_coreset, HW_map)
+
             plt.figure(figsize=(fig_width, fig_height), dpi=dpi, facecolor='white')
             plt.rcParams['font.size'] = 10
+
+            score_map_reg = score_map / score_max
 
             if cfg_draw.mode_visualize == 'eval':
                 plt.subplot2grid((7, 3), (0, 0), rowspan=1, colspan=1)
@@ -120,156 +127,118 @@ def draw_heatmap(type_data, cfg_draw, D, y, D_max, imgs_test, files_test, idx_co
                 plt.title('max score : %.2f' % score_max)
 
                 plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
-                plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
+                plt.imshow(overlay_heatmap_on_image(img, score_map_reg))
 
                 plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
-                plt.imshow((img.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
+                plt.imshow((img.astype(np.float32) * score_map_reg[..., None]).astype(np.uint8))
 
                 plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
                 plt.imshow(img_patch, interpolation='none')
                 plt.title('patch images created with top1-NN')
+
             elif cfg_draw.mode_visualize == 'infer':
-                plt.subplot2grid((7, 2), (0, 0), rowspan=1, colspan=1)
+                plt.subplot(2, 2, 1)
                 plt.imshow(img)
                 plt.title('%s : %s' % (file.split('/')[-2], file.split('/')[-1]))
 
-                plt.subplot2grid((7, 2), (0, 1), rowspan=1, colspan=1)
+                plt.subplot(2, 2, 2)
                 plt.imshow(score_map)
                 plt.colorbar()
                 plt.title('max score : %.2f' % score_max)
 
-                plt.subplot2grid((42, 2), (7, 0), rowspan=10, colspan=1)
-                plt.imshow(overlay_heatmap_on_image(img, (score_map / score_max)))
+                plt.subplot(2, 2, 3)
+                plt.imshow(overlay_heatmap_on_image(img, score_map_reg))
 
-                plt.subplot2grid((42, 2), (7, 1), rowspan=10, colspan=1)
-                plt.imshow((img.astype(np.float32) * (score_map / score_max)[..., None]).astype(np.uint8))
-
-                plt.subplot2grid((21, 1), (10, 0), rowspan=11, colspan=1)
+                plt.subplot(2, 2, 4)
                 plt.imshow(img_patch, interpolation='none')
                 plt.title('patch images created with top1-NN')
 
             score_tmp = np.max(score_map) / score_max * 100
-            filename_out = os.path.join(cfg_draw.path_result, type_data,
-                                        ('localization_%s_%s_%s_p%04d_k%02d_s%03d.png' %
-                                         (type_data, type_test, 
-                                          os.path.basename(file).split('.')[0],
-                                          (cfg_draw.percentage_coreset * 1000),
-                                          cfg_draw.k, round(score_tmp))))
+            plt.gcf().canvas.draw()
+            img_figure = np.fromstring(plt.gcf().canvas.tostring_rgb(), dtype='uint8')
+            img_figure = img_figure.reshape(fig_height * dpi, -1, 3)
+            img_figure = img_figure[pixel_cut[0]:(img_figure.shape[0] - pixel_cut[1]),
+                                    pixel_cut[2]:(img_figure.shape[1] - pixel_cut[3])]
 
-            img_figure = None
-            if is_save_file:
-                plt.gcf().savefig(filename_out)
+            if not cfg_draw.mode_video:
+                filename_out = ('%s/%s/localization_%s_%s_%s_p%04d_k%02d_s%03d.png' %
+                                (cfg_draw.path_result, type_data,
+                                 type_data, type_test, os.path.basename(file).split('.')[0],
+                                 (cfg_draw.percentage_coreset * 1000), cfg_draw.k,
+                                 round(score_tmp)))
+                cv2.imwrite(filename_out, img_figure[..., ::-1])
             else:
-                plt.gcf().canvas.draw()
-                img_figure = np.fromstring(plt.gcf().canvas.tostring_rgb(), dtype='uint8')
-                img_figure = img_figure.reshape(fig_height * dpi, -1, 3)
-                img_figure_list.append(img_figure)
+                writer.write(img_figure[..., ::-1])
 
             plt.clf()
             plt.close()
 
-        img_figure_array = np.concatenate(img_figure_list) if 0 < len(img_figure_list) else None
-        img_figure_dict[type_test] = img_figure_array
-
-    return img_figure_dict
+        if cfg_draw.mode_video:
+            writer.release()
 
 
-def pickup_patch(idx_patch, imgs, HW_map, size_receptive_field, coreset_patch=None):
-    # get input shape
-    h = imgs.shape[-3]
-    w = imgs.shape[-2]
-    # calculate half size for split
-    h_half = int((size_receptive_field - 1) / 2)
-    w_half = int((size_receptive_field - 1) / 2)
-    # calculate center-coordinates of split-image
-    y_pitch = np.arange(0, (h - 1 + 1e-10), ((h - 1) / (HW_map[0] - 1)))
-    y_pitch = np.round(y_pitch).astype(np.int16)
-    y_pitch = y_pitch + h_half
-    x_pitch = np.arange(0, (w - 1 + 1e-10), ((w - 1) / (HW_map[1] - 1)))
-    x_pitch = np.round(x_pitch).astype(np.int16)
-    x_pitch = x_pitch + w_half
-    # padding to normal images
-    imgs = np.pad(imgs, ((0, 0), (h_half, h_half), (w_half, w_half), (0, 0)))
+def assemble_patch(idx_patch, imgs_coreset, HW_map):
+    size_receptive = imgs_coreset.shape[1]
+    img_patch = np.zeros([(HW_map[0] * size_receptive),
+                          (HW_map[1] * size_receptive), 3], dtype=np.uint8)
 
-    # build blank image for output
-    img_patch = np.zeros([(HW_map[0] * size_receptive_field),
-                          (HW_map[1] * size_receptive_field), 3], dtype=np.uint8)
+    # reset counter
     i_y = 0
     i_x = 0
 
     # loop of patch feature index
     for i_patch in idx_patch:
-        i_img = i_patch // (HW_map[0] * HW_map[1])
-        i_HW = i_patch % (HW_map[0] * HW_map[1])
-        i_H = i_HW // HW_map[1]
-        i_W = i_HW % HW_map[1]
+        # tile...
+        img_piece = imgs_coreset[i_patch]
+        y = i_y * size_receptive
+        x = i_x * size_receptive
+        img_patch[y:(y + size_receptive), x:(x + size_receptive)] = img_piece
 
-        img = imgs[i_img]
-        y = y_pitch[i_H]
-        x = x_pitch[i_W]
-        img_piece = img[(y - h_half):(y + h_half + 1),
-                    (x - w_half):(x + w_half + 1)]
-
-        y = i_y * size_receptive_field
-        x = i_x * size_receptive_field
-        img_patch[y:(y + size_receptive_field),
-        x:(x + size_receptive_field)] = img_piece
+        # count-up
         i_x += 1
-        if (i_x >= HW_map[1]):
+        if i_x == HW_map[1]:
             i_x = 0
             i_y += 1
 
     return img_patch
 
 
-def pickup_patch_from_coreset_patch(idx_patch, coreset_patch, imgs_shape, HW_map, size_receptive_field):
-    img_patch = np.zeros([
-        (HW_map[0] * size_receptive_field),
-        (HW_map[1] * size_receptive_field),
-        3], dtype=np.uint8)
+def draw_curve(cfg_draw, x_img, y_img, auc_img, auc_img_mean,
+                         x_pix, y_pix, auc_pix, auc_pix_mean, flg_roc=True):
+    if flg_roc:
+        idx = 'ROC'
+        lbl_x = 'False Positive Rate'
+        lbl_y = 'True Positive Rate'
+    else:
+        idx = 'PR'
+        lbl_x = 'Recall'
+        lbl_y = 'Precision'
 
-    i_y = 0
-    i_x = 0
-
-    # loop of patch feature index
-    for i_patch in idx_patch:
-        img_piece = coreset_patch[i_patch]
-
-        y = i_y * size_receptive_field
-        x = i_x * size_receptive_field
-        img_patch[y:(y + size_receptive_field), x:(x + size_receptive_field)] = img_piece
-        i_x += 1
-        if i_x >= HW_map[1]:
-            i_x = 0
-            i_y += 1
-
-    return img_patch
-
-
-def draw_roc_curve(cfg_draw, fpr_img, tpr_img, rocauc_img, rocauc_img_mean,
-                             fpr_pix, tpr_pix, rocauc_pix, rocauc_pix_mean):
-    plt.figure(figsize=(12, 6), dpi=100, facecolor='white')
-    for type_data in fpr_img.keys():
+    plt.figure(figsize=(15, 6), dpi=100, facecolor='white')
+    for type_data in x_img.keys():
         plt.subplot(1, 2, 1)
-        plt.plot(fpr_img[type_data], tpr_img[type_data],
-                 label='%s ROCAUC: %.3f' % (type_data, rocauc_img[type_data]))
+        plt.plot(x_img[type_data], y_img[type_data],
+                 label='%s %sAUC: %.3f' % (type_data, idx, auc_img[type_data]))
         plt.subplot(1, 2, 2)
-        plt.plot(fpr_pix[type_data], tpr_pix[type_data],
-                 label='%s ROCAUC: %.3f' % (type_data, rocauc_pix[type_data]))
+        plt.plot(x_pix[type_data], y_pix[type_data],
+                 label='%s %sAUC: %.3f' % (type_data, idx, auc_pix[type_data]))
 
     plt.subplot(1, 2, 1)
-    plt.title('imagewise anomaly detection accuracy (ROCAUC %%) : mean %.3f' % rocauc_img_mean)
+    plt.title('imagewise %sAUC %% : mean %.3f' % (idx, auc_img_mean))
     plt.grid()
-    plt.legend()
+    plt.legend(loc='lower right')
+    plt.xlabel(lbl_x)
+    plt.ylabel(lbl_y)
     plt.subplot(1, 2, 2)
-    plt.title('pixelwise anomaly detection accuracy (ROCAUC %%) : mean %.3f' % rocauc_pix_mean)
+    plt.title('pixelwise %sAUC %% : mean %.3f' % (idx, auc_pix_mean))
     plt.grid()
-    plt.legend()
+    plt.legend(loc='lower right')
+    plt.xlabel(lbl_x)
+    plt.ylabel(lbl_y)
     plt.gcf().tight_layout()
-    plt.gcf().savefig(os.path.join(cfg_draw.path_result,
-                                   ('roc-curve_p%04d_k%02d_rim%04d_rpm%04d.png' %
-                                    ((cfg_draw.percentage_coreset * 1000), cfg_draw.k,
-                                     round(rocauc_img_mean * 1000),
-                                     round(rocauc_pix_mean * 1000)))))
+    plt.gcf().savefig('%s/%s-curve_p%04d_k%02d_aucimg%04d_aucpix%04d.png' %
+                      (cfg_draw.path_result, idx.lower(),
+                       (cfg_draw.percentage_coreset * 1000), cfg_draw.k,
+                       round(auc_img_mean * 1000), round(auc_pix_mean * 1000)))
     plt.clf()
     plt.close()

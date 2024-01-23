@@ -2,14 +2,14 @@ import os
 
 import numpy as np
 import cv2
-from tqdm import tqdm
 import torch
+from tqdm import tqdm
 import faiss
 from scipy.ndimage import gaussian_filter
 
 
 class PatchCore:
-    def __init__(self, cfg_patchcore, HW_map):
+    def __init__(self, cfg_patchcore):
         self.device = cfg_patchcore.device
         self.k = cfg_patchcore.k
         self.dim_coreset_feat = cfg_patchcore.dim_coreset_feat
@@ -17,28 +17,27 @@ class PatchCore:
         self.percentage_coreset = cfg_patchcore.percentage_coreset
         self.dim_sampling = cfg_patchcore.dim_sampling
         self.num_initial_coreset = cfg_patchcore.num_initial_coreset
-        self.seed = cfg_patchcore.seed
         self.shape_stretch = cfg_patchcore.shape_stretch
         self.pixel_outer_decay = cfg_patchcore.pixel_outer_decay
-        self.HW_map = HW_map
 
-        # prep knn index
+        # prep knn idx
         if self.device.type != 'cuda':
-            self.index_feat = faiss.IndexFlatL2(self.dim_coreset_feat)
+            self.idx_feat = faiss.IndexFlatL2(self.dim_coreset_feat)
         else:
-            self.index_feat = faiss.GpuIndexFlatL2(faiss.StandardGpuResources(),
-                                                   self.dim_coreset_feat,
-                                                   faiss.GpuIndexFlatConfig())
+            self.idx_feat = faiss.GpuIndexFlatL2(faiss.StandardGpuResources(),
+                                                 self.dim_coreset_feat,
+                                                 faiss.GpuIndexFlatConfig())
 
-        # prep mapper
-        self.mapper = torch.nn.Linear(self.dim_coreset_feat, self.dim_sampling,
-                                      bias=False).to(self.device)
+        if self.dim_sampling is not None:
+            # prep mapper
+            self.mapper = torch.nn.Linear(self.dim_coreset_feat, self.dim_sampling,
+                                          bias=False).to(self.device)
 
-        self.faiss_save_dir = cfg_patchcore.faiss_save_dir
-        os.makedirs(self.faiss_save_dir, exist_ok=True)
+        self.path_trained = cfg_patchcore.path_trained
+        os.makedirs(self.path_trained, exist_ok=True)
 
-        self.coreset_patch_save_dir = cfg_patchcore.coreset_patch_save_dir
-        os.makedirs(self.coreset_patch_save_dir, exist_ok=True)
+        self.path_trained = cfg_patchcore.path_trained
+        os.makedirs(self.path_trained, exist_ok=True)
 
     def compute_greedy_coreset_idx(self, feat):
         feat = feat.to(self.device)
@@ -47,7 +46,6 @@ class PatchCore:
 
         _num_initial_coreset = np.clip(self.num_initial_coreset,
                                        None, len(feat_proj))
-        np.random.seed(self.seed)
         start_points = np.random.choice(len(feat_proj), _num_initial_coreset,
                                         replace=False).tolist()
 
@@ -87,25 +85,13 @@ class PatchCore:
         idx_coreset = np.array(idx_coreset)
         return idx_coreset
 
-    def reset_neighbor(self):
-        self.index_feat.reset()
+    def reset_faiss_index(self):
+        self.idx_feat.reset()
 
     def add_neighbor(self, feat_train):
-        self.index_feat.add(feat_train.numpy())
+        self.idx_feat.add(feat_train.numpy())
 
-    def save_neighbor(self, type_data):
-        faiss_save_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
-        cpu_index = faiss.index_gpu_to_cpu(self.index_feat)
-        faiss.write_index(cpu_index, faiss_save_path)
-
-    def load_neighbor(self, type_data):
-        faiss_idx_path = os.path.join(self.faiss_save_dir, f'{type_data}.idx')
-        self.index_feat = faiss.read_index(faiss_idx_path)
-
-    def load_neighbor_from_file(self, file_path):
-        self.index_feat = faiss.read_index(file_path)
-
-    def localization(self, feat_test, show_progress=True):
+    def localization(self, feat_test, HW_map, show_progress=True):
         D = {}
         D_max = -9999
         I = {}
@@ -116,12 +102,14 @@ class PatchCore:
 
             # loop for test data
             _feat_test = feat_test[type_test]
-            _feat_test = _feat_test.reshape(-1, (self.HW_map[0] * self.HW_map[1]), self.dim_coreset_feat)
+            _feat_test = _feat_test.reshape(-1, (HW_map[0] * HW_map[1]),
+                                            self.dim_coreset_feat)
             _feat_test = _feat_test.numpy()
             num_data = len(_feat_test)
-            for i in tqdm(range(num_data), desc='localization (case:%s)' % type_test, disable=not show_progress):
+            for i in tqdm(range(num_data), desc='localization (case:%s)' % type_test,
+                          disable=not show_progress):
                 # measure distance pixelwise
-                score_map, I_tmp = self.measure_dist_pixelwise(feat_test=_feat_test[i])
+                score_map, I_tmp = self.measure_dist_pixelwise(_feat_test[i], HW_map)
                 # adjust score of outer-pixel (provisional heuristic algorithm)
                 if self.pixel_outer_decay > 0:
                     score_map[:self.pixel_outer_decay, :] *= 0.6
@@ -139,13 +127,13 @@ class PatchCore:
 
         return D, D_max, I
 
-    def measure_dist_pixelwise(self, feat_test):
+    def measure_dist_pixelwise(self, feat_test, HW_map):
         # k nearest neighbor
-        D, I = self.index_feat.search(feat_test, self.k)
+        D, I = self.idx_feat.search(feat_test, self.k)
         D = np.mean(D, axis=-1)
 
         # transform to scoremap
-        score_map = D.reshape(*self.HW_map)
+        score_map = D.reshape(*HW_map)
         score_map = cv2.resize(score_map, (self.shape_stretch[1], self.shape_stretch[0]))
 
         # apply gaussian smoothing on the score map
@@ -153,13 +141,25 @@ class PatchCore:
 
         return score_map_smooth, I
 
-    def pickup_patch(self, idx_patch, imgs, HW_map, size_receptive_field):
+    def save_faiss_index(self, type_data):
+        path_faiss_idx = '%s/%s.idx' % (self.path_trained, type_data)
+        idx_feat_cpu = faiss.index_gpu_to_cpu(self.idx_feat)
+        faiss.write_index(idx_feat_cpu, path_faiss_idx)
+
+    def load_faiss_index(self, type_data):
+        path_faiss_idx = '%s/%s.idx' % (self.path_trained, type_data)
+        self.idx_feat = faiss.read_index(path_faiss_idx)
+
+    def load_faiss_index_direct(self, path_faiss_idx):
+        self.idx_feat = faiss.read_index(path_faiss_idx)
+
+    def pickup_patch(self, idx_patch, imgs, HW_map, size_receptive):
         h = imgs.shape[-3]
         w = imgs.shape[-2]
 
         # calculate half size for split
-        h_half = int((size_receptive_field - 1) / 2)
-        w_half = int((size_receptive_field - 1) / 2)
+        h_half = int((size_receptive - 1) / 2)
+        w_half = int((size_receptive - 1) / 2)
 
         # calculate center-coordinates of split-image
         y_pitch = np.arange(0, (h - 1 + 1e-10), ((h - 1) / (HW_map[0] - 1)))
@@ -171,6 +171,7 @@ class PatchCore:
         # padding to normal images
         imgs = np.pad(imgs, ((0, 0), (h_half, h_half), (w_half, w_half), (0, 0)))
 
+        # collect piece image
         img_piece_list = []
         for i_patch in idx_patch:
             i_img = i_patch // (HW_map[0] * HW_map[1])
@@ -188,24 +189,18 @@ class PatchCore:
 
         return img_piece_array
 
-    def save_coreset_patch(self, idx_coreset, type_data, image_train, HW_map, cfg_draw):
-        img_patch = self.pickup_patch(idx_coreset, image_train, HW_map, cfg_draw.size_receptive_field)
-        coreset_img_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_img.npy')
-        np.save(coreset_img_file_path, img_patch)
+    def save_coreset(self, idx_coreset, type_data, imgs_train, HW_map, size_receptive):
+        # save patch images of coreset
+        imgs_coreset = self.pickup_patch(idx_coreset, imgs_train, HW_map, size_receptive)
+        path_coreset_img = '%s/%s_img_coreset.npy' % (self.path_trained, type_data)
+        np.save(path_coreset_img, imgs_coreset)
 
-        coreset_idx_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_idx.npy')
-        np.save(coreset_idx_file_path, idx_coreset)
+        return imgs_coreset
 
-    def load_coreset_patch(self, type_data):
-        coreset_img_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_img.npy')
-        coreset_patch_img = np.load(coreset_img_file_path)
+    def load_coreset(self, type_data):
+        # load patch images of coreset
+        path_coreset_img = '%s/%s_img_coreset.npy' % (self.path_trained, type_data)
+        imgs_coreset = np.load(path_coreset_img)
 
-        coreset_idx_file_path = os.path.join(self.coreset_patch_save_dir, f'{type_data}_coreset_patch_idx.npy')
-        coreset_patch_idx = np.load(coreset_idx_file_path)
-
-        return coreset_patch_idx, coreset_patch_img
-
-    def load_coreset_patch_from_file(self, file_path):
-        coreset_patch_img = np.load(file_path)
-        return coreset_patch_img
+        return imgs_coreset
 
